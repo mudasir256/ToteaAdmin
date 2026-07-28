@@ -1,0 +1,13 @@
+.field {
+  border-color: var(--line);
+  color: var(--foreground);
+}
+
+.field::placeholder {
+  color: #829399;
+}
+
+.field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgb(168 97 0 / 20%);
+}

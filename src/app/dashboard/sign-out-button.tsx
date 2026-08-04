@@ -22,7 +22,7 @@ export function SignOutButton() {
       type="button"
       onClick={handleSignOut}
       disabled={isSigningOut}
-      className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-xl border border-(--line) px-4 text-sm font-semibold text-(--muted) transition hover:border-(--accent) hover:text-(--accent-strong) active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+      className="mt-2.5 inline-flex h-10 w-full items-center justify-center rounded-lg border border-(--line) px-4 text-xs font-semibold text-foreground transition hover:border-(--accent) hover:text-(--accent-strong) active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
     >
       {isSigningOut ? "Signing out..." : "Sign out"}
     </button>

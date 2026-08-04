@@ -11,15 +11,14 @@ export default async function ReviewsPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <main className="h-[100dvh] overflow-hidden bg-(--surface) xl:grid xl:grid-cols-[236px_minmax(0,1fr)]">
+    <main className="h-[100dvh] overflow-hidden bg-(--surface) xl:grid xl:grid-cols-[230px_minmax(0,1fr)]">
       <DashboardSidebar email={identity.email} name={identity.name} activeItem="reviews" />
-      <section className="min-w-0 overflow-hidden px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
-        <div className="mx-auto flex h-full min-h-0 max-w-6xl flex-col">
+      <section className="min-w-0 overflow-hidden px-4 py-6 sm:px-7">
+        <div className="mx-auto flex h-full min-h-0 max-w-[1240px] flex-col">
           <header>
-            <p className="text-sm font-medium text-(--accent)">Main website content</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Reviews</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-(--muted)">
-              Add and maintain the customer reviews that appear on the public ToTea website.
+            <h1 className="font-serif text-xl font-bold text-foreground">Reviews</h1>
+            <p className="mt-0.5 text-xs text-(--muted)">
+              Add and maintain the customer reviews that appear on the public Totea website.
             </p>
           </header>
           <ReviewsManager initialReviews={reviews ?? []} initialError={reviewsError?.message} />

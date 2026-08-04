@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { type ChangeEvent, type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import {
   IconCheck,
   IconPencil,
@@ -46,22 +46,38 @@ const emptyForm: ToppingForm = {
   sortOrder: "0",
 };
 
-const fieldClass =
-  "h-11 w-full rounded-xl border border-(--line) bg-white px-3.5 text-sm text-foreground outline-none transition placeholder:text-[#829399] focus:border-(--accent) focus:ring-2 focus:ring-[#a86100]/20";
+const inputClass =
+  "h-10 w-full rounded-lg border border-(--line) bg-white px-3 text-[13px] text-foreground outline-none transition focus:border-(--accent) focus:ring-2 focus:ring-[#b8762f]/20";
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 const maxImageSize = 5 * 1024 * 1024;
 
-export function ToppingsManager({
-  initialToppings,
-  initialError,
-}: ToppingsManagerProps) {
+function imagePathFromPublicUrl(imageUrl: string) {
+  const marker = "/storage/v1/object/public/menu-images/";
+  const markerIndex = imageUrl.indexOf(marker);
+  return markerIndex === -1
+    ? null
+    : decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
+}
+
+export function ToppingsManager({ initialToppings, initialError }: ToppingsManagerProps) {
   const [toppings, setToppings] = useState(initialToppings);
   const [form, setForm] = useState<ToppingForm>(emptyForm);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [statusMenu, setStatusMenu] = useState<{ toppingId: string; top: number; left: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
+
+  useEffect(() => {
+    if (!statusMenu) return;
+    function close() {
+      setStatusMenu(null);
+    }
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [statusMenu]);
 
   async function loadToppings() {
     setIsLoading(true);
@@ -212,205 +228,205 @@ export function ToppingsManager({
     }
 
     if (editingId === topping.id) resetForm();
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      next.delete(topping.id);
+      return next;
+    });
     await loadToppings();
   }
 
-  const standardCount = toppings.filter((topping) => topping.category === "standard").length;
-  const creamCount = toppings.length - standardCount;
+  async function setAvailability(ids: string[], isAvailable: boolean) {
+    setError(null);
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("menu_toppings")
+      .update({ is_available: isAvailable })
+      .in("id", ids);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setToppings((current) =>
+      current.map((topping) =>
+        ids.includes(topping.id) ? { ...topping, is_available: isAvailable } : topping,
+      ),
+    );
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function openStatusMenu(event: React.MouseEvent, toppingId: string) {
+    event.stopPropagation();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    setStatusMenu({ toppingId, top: rect.bottom + 6, left: rect.left });
+  }
+
+  const standardToppings = toppings.filter((topping) => topping.category === "standard");
+  const creamToppings = toppings.filter((topping) => topping.category === "cream");
+  const selectedCount = selectedIds.size;
 
   return (
-    <div className="py-6 sm:py-8">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <SummaryPill label="Standard" value={standardCount} />
-          <SummaryPill label="Cream" value={creamCount} />
+    <div>
+      <div className="mb-[18px] flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex gap-2">
+          <GroupTab count={standardToppings.length} label="Standard" />
+          <GroupTab count={creamToppings.length} label="Cream" />
         </div>
         <button
           type="button"
           onClick={() => void loadToppings()}
           disabled={isLoading}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-(--line) bg-(--surface-raised) px-3.5 text-sm font-semibold text-(--muted) outline-none transition hover:border-(--accent) hover:text-(--accent-strong) focus-visible:ring-2 focus-visible:ring-(--accent) disabled:opacity-60"
+          className="inline-flex h-10 items-center gap-1.5 rounded-[9px] border border-(--line) bg-white px-4 text-[12.5px] font-semibold text-foreground transition hover:border-(--accent) hover:text-(--accent-strong) disabled:opacity-60"
         >
-          <IconSparkles size={17} stroke={1.8} aria-hidden={true} />
+          <IconSparkles size={15} stroke={1.9} aria-hidden />
           {isLoading ? "Refreshing..." : "Refresh toppings"}
         </button>
       </div>
 
       {error ? (
-        <p
-          role="alert"
-          className="mb-5 rounded-xl border border-[#c98b26]/35 bg-(--accent-soft) px-4 py-3 text-sm leading-6 text-[#7a4d00]"
-        >
+        <p role="alert" className="mb-3.5 rounded-xl border border-dashed border-[#d9b57a] bg-[#fdf3e3] px-3 py-2.5 text-xs leading-5 text-(--accent-strong)">
           {error}
         </p>
       ) : null}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(340px,0.76fr)_minmax(0,1.24fr)]">
-        <form
-          onSubmit={saveTopping}
-          className="rounded-2xl border border-(--line) bg-(--surface-raised) p-5 shadow-[0_18px_45px_rgba(21,58,67,0.05)] sm:p-6"
-        >
-          <div className="flex items-start gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-(--accent-soft) text-(--accent)">
-              <IconSparkles size={18} stroke={1.8} aria-hidden={true} />
-            </span>
-            <div>
-              <p className="text-base font-semibold text-foreground">
-                {editingId ? "Edit topping" : "Add a topping"}
-              </p>
-              <p className="mt-1 text-sm leading-6 text-(--muted)">
-                Toppings saved here appear on the public menu.
-              </p>
-            </div>
-          </div>
+      <div className="grid items-start gap-5 xl:grid-cols-[1fr_1.35fr]">
+        <form onSubmit={saveTopping} className="rounded-[14px] border border-(--line) bg-white p-6">
+          <p className="text-[15px] font-bold text-foreground">
+            {editingId ? "Edit topping" : "Add a topping"}
+          </p>
+          <p className="mb-4 mt-1 text-[11.5px] text-(--muted)">
+            Toppings saved here appear on the public menu and every item referencing this group.
+          </p>
 
-          <div className="mt-6 grid gap-4">
-            <Field label="Topping name">
+          <Field label="Topping name">
+            <input
+              required
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              className={inputClass}
+              placeholder="e.g. Crystal Boba"
+              maxLength={80}
+            />
+          </Field>
+
+          <Field label="Topping group">
+            <div className="flex overflow-hidden rounded-[10px] border border-(--line)">
+              {[
+                { value: "standard" as const, label: "Standard" },
+                { value: "cream" as const, label: "Cream upsell" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setForm((current) => ({ ...current, category: option.value }))}
+                  className={`flex-1 px-2 py-3 text-center text-[13.5px] font-bold transition ${
+                    form.category === option.value
+                      ? "bg-(--green-soft) text-foreground"
+                      : "text-(--muted) hover:bg-(--surface)"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3.5">
+            <Field label="Price">
               <input
                 required
-                value={form.name}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, name: event.target.value }))
-                }
-                className={fieldClass}
-                placeholder="Honey Boba"
-                maxLength={80}
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.price}
+                onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
+                className={inputClass}
+                placeholder="0.00"
               />
             </Field>
-
-            <fieldset>
-              <legend className="text-sm font-medium text-foreground">Topping group</legend>
-              <div className="mt-2 grid grid-cols-2 rounded-xl border border-(--line) bg-(--surface-tint) p-1">
-                {[
-                  { value: "standard" as const, label: "Standard" },
-                  { value: "cream" as const, label: "Cream upsell" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() =>
-                      setForm((current) => ({ ...current, category: option.value }))
-                    }
-                    className={`h-9 rounded-lg px-3 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${
-                      form.category === option.value
-                        ? "bg-white text-foreground shadow-sm"
-                        : "text-(--muted) hover:text-foreground"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Price">
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.price}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, price: event.target.value }))
-                  }
-                  className={fieldClass}
-                  placeholder="0.75"
-                />
-              </Field>
-              <Field label="Display order">
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.sortOrder}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      sortOrder: event.target.value,
-                    }))
-                  }
-                  className={fieldClass}
-                />
-              </Field>
-            </div>
-
-            <div className="grid min-w-0 gap-2">
-              <span className="text-sm font-medium text-foreground">Topping image</span>
-              <label className="flex min-h-11 min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-(--line) bg-(--surface-tint) px-3.5 py-2.5 text-sm transition hover:border-(--accent) hover:bg-(--accent-soft)">
-                <IconPhotoUp
-                  size={18}
-                  stroke={1.8}
-                  className="shrink-0 text-(--accent)"
-                  aria-hidden={true}
-                />
-                <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                  {imageFile
-                    ? imageFile.name
-                    : form.imageUrl
-                      ? "Current image saved — choose a new file to replace it"
-                      : "Choose a topping image"}
-                </span>
-                <span className="shrink-0 text-xs font-semibold text-(--accent)">
-                  Browse
-                </span>
-                <input
-                  required={!editingId && !form.imageUrl}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/avif"
-                  onChange={selectImage}
-                  className="sr-only"
-                />
-              </label>
-              <p className="text-xs leading-5 text-(--muted)">
-                JPG, PNG, WebP, or AVIF. Maximum file size 5 MB.
-              </p>
-            </div>
-
-            <fieldset>
-              <legend className="text-sm font-medium text-foreground">Availability</legend>
-              <div className="mt-2 grid grid-cols-2 rounded-xl border border-(--line) bg-(--surface-tint) p-1">
-                {[
-                  { value: true, label: "Available" },
-                  { value: false, label: "Hidden" },
-                ].map((option) => (
-                  <button
-                    key={String(option.value)}
-                    type="button"
-                    onClick={() =>
-                      setForm((current) => ({
-                        ...current,
-                        isAvailable: option.value,
-                      }))
-                    }
-                    className={`h-9 rounded-lg px-3 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${
-                      form.isAvailable === option.value
-                        ? "bg-white text-foreground shadow-sm"
-                        : "text-(--muted) hover:text-foreground"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            <Field label="Display order">
+              <input
+                required
+                type="number"
+                min="0"
+                step="1"
+                value={form.sortOrder}
+                onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
+                className={inputClass}
+                placeholder="0"
+              />
+            </Field>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <Field label="Topping image">
+            <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border-[1.5px] border-dashed border-(--line) bg-[#fafcf9] p-3 transition hover:border-(--accent)">
+              <IconPhotoUp size={19} stroke={1.7} className="shrink-0 text-(--accent)" aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                {imageFile
+                  ? imageFile.name
+                  : form.imageUrl
+                    ? "Current image saved — choose a new file to replace it"
+                    : "Choose a topping image"}
+                <span className="block text-[10px] font-normal text-(--muted)">
+                  JPG, PNG, WebP, or AVIF · max 5 MB
+                </span>
+              </span>
+              <span className="shrink-0 text-[11.5px] font-bold text-(--accent-strong)">Browse</span>
+              <input
+                required={!editingId && !form.imageUrl}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                onChange={selectImage}
+                className="sr-only"
+              />
+            </label>
+          </Field>
+
+          <Field label="Availability">
+            <div className="flex overflow-hidden rounded-[10px] border border-(--line)">
+              {[
+                { value: true, label: "✓ Available", activeClass: "bg-(--green-soft) text-(--green)" },
+                { value: false, label: "Hidden", activeClass: "bg-(--surface-tint) text-foreground" },
+              ].map((option) => (
+                <button
+                  key={String(option.value)}
+                  type="button"
+                  onClick={() => setForm((current) => ({ ...current, isAvailable: option.value }))}
+                  className={`flex-1 px-2 py-[11px] text-center text-[12.5px] font-bold transition ${
+                    form.isAvailable === option.value ? option.activeClass : "text-(--muted) hover:bg-(--surface)"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <div className="flex gap-2.5">
             <button
               type="submit"
               disabled={isSaving}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(168,97,0,0.16)] transition hover:bg-(--accent-strong) active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-(--accent) bg-(--accent) px-4 text-[12.5px] font-semibold text-white transition hover:bg-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <IconPlus size={17} stroke={2} aria-hidden={true} />
+              <IconPlus size={15} stroke={2.2} aria-hidden />
               {isSaving ? "Saving..." : editingId ? "Save topping" : "Create topping"}
             </button>
             {editingId ? (
               <button
                 type="button"
                 onClick={resetForm}
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-(--line) px-4 text-sm font-semibold text-(--muted) transition hover:border-(--accent) hover:text-(--accent-strong)"
+                className="h-10 rounded-[9px] border border-(--line) bg-white px-4 text-[12.5px] font-semibold text-foreground transition hover:border-(--accent)"
               >
                 Cancel
               </button>
@@ -418,132 +434,230 @@ export function ToppingsManager({
           </div>
         </form>
 
-        <section className="overflow-hidden rounded-2xl border border-(--line) bg-(--surface-raised) shadow-[0_18px_45px_rgba(21,58,67,0.04)]">
-          <div className="flex items-start justify-between gap-4 border-b border-(--line) px-5 py-5 sm:px-6">
+        <section className="overflow-hidden rounded-[14px] border border-(--line) bg-white pb-2">
+          <div className="flex items-start justify-between gap-4 px-[22px] pt-5">
             <div>
-              <p className="text-base font-semibold text-foreground">Topping bar</p>
-              <p className="mt-1 text-sm text-(--muted)">
+              <p className="text-base font-bold text-foreground">Topping bar</p>
+              <p className="mt-0.5 text-[11.5px] text-(--muted)">
                 Image, price, order, and visibility stay synchronized with the website.
               </p>
             </div>
-            <span className="rounded-full border border-(--line) bg-(--surface-tint) px-3 py-1.5 text-xs font-semibold text-(--muted)">
+            <span className="whitespace-nowrap rounded-[14px] border border-(--line) bg-(--surface) px-3 py-[5px] text-[11.5px] font-bold text-foreground">
               {toppings.length} total
             </span>
           </div>
 
-          {toppings.length === 0 ? (
-            <div className="px-6 py-16 text-center">
-              <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-(--accent-soft) text-(--accent)">
-                <IconSparkles size={20} stroke={1.8} aria-hidden={true} />
+          {selectedCount > 0 ? (
+            <div className="mx-[22px] mt-3.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-[#3f2f22] px-[18px] py-3 text-white">
+              <span className="text-[12.5px]">
+                <b>{selectedCount} selected</b>
               </span>
-              <p className="mt-4 font-semibold text-foreground">No toppings yet</p>
-              <p className="mt-2 text-sm text-(--muted)">
-                Add the first topping using the form.
-              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void setAvailability([...selectedIds], false)}
+                  className="rounded-lg bg-white/12 px-3 py-2 text-xs font-semibold transition hover:bg-white/20"
+                >
+                  ⛔ Mark Sold Out
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void setAvailability([...selectedIds], true)}
+                  className="rounded-lg bg-white/12 px-3 py-2 text-xs font-semibold transition hover:bg-white/20"
+                >
+                  ✓ Mark Available
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="rounded-lg bg-white/12 px-3 py-2 text-xs font-semibold transition hover:bg-white/20"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
+          ) : null}
+
+          {toppings.length === 0 ? (
+            <p className="px-[22px] py-12 text-center text-[12.5px] text-(--muted)">
+              No toppings yet — add the first topping using the form.
+            </p>
           ) : (
-            <div className="grid gap-px bg-(--line) sm:grid-cols-2">
-              {toppings.map((topping) => (
-                <article key={topping.id} className="bg-white p-4 sm:p-5">
-                  <div className="flex items-start gap-3">
-                    <Image
-                      src={topping.image_url}
-                      alt=""
-                      width={96}
-                      height={96}
-                      className="size-14 shrink-0 rounded-2xl border border-(--line) bg-(--surface-tint) object-cover"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-foreground">
-                            {topping.name}
-                          </p>
-                          <p className="mt-1 text-xs font-bold uppercase tracking-[0.1em] text-(--accent)">
-                            {topping.category === "cream"
-                              ? "Cream upsell"
-                              : "Standard"}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => editTopping(topping)}
-                            className="grid size-8 place-items-center rounded-lg text-(--muted) outline-none transition hover:bg-(--surface-tint) hover:text-foreground focus-visible:ring-2 focus-visible:ring-(--accent)"
-                            aria-label={`Edit ${topping.name}`}
-                          >
-                            <IconPencil size={16} stroke={1.8} aria-hidden={true} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void deleteTopping(topping)}
-                            className="grid size-8 place-items-center rounded-lg text-(--muted) outline-none transition hover:bg-[#fff1ee] hover:text-[#a33b2e] focus-visible:ring-2 focus-visible:ring-(--accent)"
-                            aria-label={`Delete ${topping.name}`}
-                          >
-                            <IconTrash size={16} stroke={1.8} aria-hidden={true} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <span className="rounded-lg bg-(--accent-soft) px-2.5 py-1.5 text-xs font-semibold text-(--accent-strong)">
-                      ${Number(topping.price).toFixed(2)}
-                    </span>
-                    <span className="rounded-lg bg-(--surface-tint) px-2.5 py-1.5 text-xs font-medium text-(--muted)">
-                      Order {topping.sort_order}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                        topping.is_available
-                          ? "bg-[#eaf7ef] text-[#26734b]"
-                          : "bg-[#f2f4f4] text-[#728084]"
-                      }`}
-                    >
-                      {topping.is_available ? (
-                        <IconCheck size={13} stroke={2.4} aria-hidden={true} />
-                      ) : null}
-                      {topping.is_available ? "Available" : "Hidden"}
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </div>
+            <>
+              <ToppingGroup
+                label="Standard"
+                toppings={standardToppings}
+                selectedIds={selectedIds}
+                onToggleSelected={toggleSelected}
+                onEdit={editTopping}
+                onDelete={(topping) => void deleteTopping(topping)}
+                onStatusClick={openStatusMenu}
+              />
+              <ToppingGroup
+                label="Cream Upsell"
+                toppings={creamToppings}
+                selectedIds={selectedIds}
+                onToggleSelected={toggleSelected}
+                onEdit={editTopping}
+                onDelete={(topping) => void deleteTopping(topping)}
+                onStatusClick={openStatusMenu}
+              />
+            </>
           )}
         </section>
       </div>
+
+      {statusMenu ? (
+        <div
+          className="fixed z-50 min-w-[170px] rounded-[9px] border border-(--line) bg-white p-[5px] shadow-[0_10px_26px_rgba(0,0,0,0.12)]"
+          style={{ top: statusMenu.top, left: statusMenu.left }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              void setAvailability([statusMenu.toppingId], true);
+              setStatusMenu(null);
+            }}
+            className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-2 text-left text-xs font-semibold text-(--green) transition hover:bg-(--surface)"
+          >
+            <IconCheck size={13} stroke={2.4} aria-hidden /> Available
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void setAvailability([statusMenu.toppingId], false);
+              setStatusMenu(null);
+            }}
+            className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-2 text-left text-xs font-semibold text-(--muted) transition hover:bg-(--surface)"
+          >
+            Hidden
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function Field({
+function ToppingGroup({
   label,
-  children,
+  toppings,
+  selectedIds,
+  onToggleSelected,
+  onEdit,
+  onDelete,
+  onStatusClick,
 }: {
   label: string;
-  children: React.ReactNode;
+  toppings: MenuTopping[];
+  selectedIds: Set<string>;
+  onToggleSelected: (id: string) => void;
+  onEdit: (topping: MenuTopping) => void;
+  onDelete: (topping: MenuTopping) => void;
+  onStatusClick: (event: React.MouseEvent, id: string) => void;
 }) {
+  if (toppings.length === 0) return null;
+
   return (
-    <label className="grid gap-2">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      {children}
-    </label>
+    <>
+      <p className="mx-[22px] mb-2 mt-4 text-[10.5px] font-bold uppercase tracking-[0.05em] text-(--accent-strong)">
+        {label}
+      </p>
+      <div className="grid gap-x-5 px-[22px] pb-2 sm:grid-cols-2">
+        {toppings.map((topping) => (
+          <article key={topping.id} className="flex gap-2.5 border-t border-(--line) py-3.5">
+            <input
+              type="checkbox"
+              checked={selectedIds.has(topping.id)}
+              onChange={() => onToggleSelected(topping.id)}
+              aria-label={`Select ${topping.name}`}
+              className="mt-1 accent-(--accent)"
+            />
+            <Image
+              src={topping.image_url}
+              alt=""
+              width={88}
+              height={88}
+              className="size-11 shrink-0 rounded-[9px] border border-(--line) bg-(--surface-tint) object-cover"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-1.5">
+                <p className="truncate text-[13px] font-bold text-foreground">{topping.name}</p>
+                <div className="flex shrink-0 gap-1 text-(--muted)">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(topping)}
+                    className="grid size-7 place-items-center rounded-md transition hover:bg-(--surface-tint) hover:text-foreground"
+                    aria-label={`Edit ${topping.name}`}
+                  >
+                    <IconPencil size={14} stroke={1.8} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(topping)}
+                    className="grid size-7 place-items-center rounded-md transition hover:bg-(--red-soft) hover:text-(--red)"
+                    aria-label={`Delete ${topping.name}`}
+                  >
+                    <IconTrash size={14} stroke={1.8} aria-hidden />
+                  </button>
+                </div>
+              </div>
+              <p className="mb-1.5 text-[9.5px] font-bold uppercase text-(--accent-strong)">
+                {topping.category === "cream" ? "Cream Upsell" : "Standard"}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  className={`rounded-lg border px-2 py-[3px] text-[10.5px] font-bold ${
+                    topping.category === "cream" && Number(topping.price) === 0
+                      ? "border-[#f3cfcb] bg-(--surface) text-(--red)"
+                      : "border-(--line) bg-(--surface) text-foreground"
+                  }`}
+                >
+                  {Number(topping.price) === 0
+                    ? topping.category === "cream"
+                      ? "$0.00 ⚠"
+                      : "Free"
+                    : `$${Number(topping.price).toFixed(2)}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={(event) => onStatusClick(event, topping.id)}
+                  className={`inline-flex items-center gap-1 whitespace-nowrap rounded-[20px] px-2.5 py-[4px] text-[11px] font-bold ${
+                    topping.is_available
+                      ? "bg-(--green-soft) text-(--green)"
+                      : "bg-(--surface-tint) text-(--muted)"
+                  }`}
+                >
+                  {topping.is_available ? (
+                    <>
+                      <IconCheck size={11} stroke={2.6} aria-hidden /> Available
+                    </>
+                  ) : (
+                    "Hidden"
+                  )}
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </>
   );
 }
 
-function SummaryPill({ label, value }: { label: string; value: number }) {
+function GroupTab({ count, label }: { count: number; label: string }) {
   return (
-    <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-(--line) bg-(--surface-raised) px-3.5 text-sm text-(--muted)">
-      <strong className="text-base text-foreground">{value}</strong>
+    <span className="inline-flex items-center gap-2 rounded-xl border border-(--line) bg-white px-4 py-2.5 text-[13px] font-semibold text-foreground">
+      <span className="rounded-md bg-(--surface) px-2 py-0.5 text-xs font-bold">{count}</span>
       {label}
     </span>
   );
 }
 
-function imagePathFromPublicUrl(imageUrl: string) {
-  const marker = "/storage/v1/object/public/menu-images/";
-  const markerIndex = imageUrl.indexOf(marker);
-  return markerIndex === -1
-    ? null
-    : decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <span className="mb-[7px] block text-[12.5px] font-semibold text-foreground">{label}</span>
+      {children}
+    </div>
+  );
 }

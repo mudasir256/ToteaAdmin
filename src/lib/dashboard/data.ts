@@ -9,6 +9,8 @@ import type {
   CustomerDTO,
   OrderDTO,
   InventoryStatus,
+  MenuOptionLevelDTO,
+  OptionLevelKind,
   OrderItemDTO,
   OrderStatus,
   PaymentStatus,
@@ -213,7 +215,7 @@ export async function getCustomersPageData() {
 
 export async function getDashboardOverview() {
   const { supabase } = await getDashboardContext();
-  const [ordersResult, customerCountResult, inventoryResult] = await Promise.all([
+  const [ordersResult, customerCountResult, inventoryResult, menuResult] = await Promise.all([
     supabase
       .from("orders")
       .select("id, order_number, customer_details, items, total, order_status, payment_status, inventory_status, inventory_error, created_at")
@@ -221,24 +223,47 @@ export async function getDashboardOverview() {
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "customer"),
     supabase
       .from("inventory_items")
-      .select("current_quantity, minimum_quantity, is_active")
+      .select("name, current_quantity, minimum_quantity, unit, is_active")
       .eq("is_active", true),
+    supabase
+      .from("menu_items")
+      .select("name, is_available")
+      .eq("is_available", false)
+      .order("sort_order", { ascending: true }),
   ]);
 
   const orders = ((ordersResult.data ?? []) as JsonRecord[]).map((row) => orderDTO(row));
   const inventory = (inventoryResult.data ?? []) as Array<{
+    name: string;
     current_quantity: number | string;
     minimum_quantity: number | string;
+    unit: string;
   }>;
-  const stockAttention = inventory.filter((item) => {
-    const current = number(item.current_quantity);
-    const minimum = number(item.minimum_quantity);
-    return current === 0 || (minimum > 0 && current <= minimum);
-  }).length;
+  const lowStockItems = inventory
+    .filter((item) => {
+      const current = number(item.current_quantity);
+      const minimum = number(item.minimum_quantity);
+      return current === 0 || (minimum > 0 && current <= minimum);
+    })
+    .map((item) => ({
+      name: item.name,
+      quantity: number(item.current_quantity),
+      unit: item.unit,
+    }));
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const ordersToday = orders.filter(
+    (order) => order.createdAt && new Date(order.createdAt) >= startOfToday,
+  );
 
   return {
     orders,
     recentOrders: orders.slice(0, 6),
+    ordersTodayCount: ordersToday.length,
+    revenueToday: ordersToday
+      .filter((order) => order.paymentStatus === "paid")
+      .reduce((sum, order) => sum + order.total, 0),
     customerCount: customerCountResult.count ?? 0,
     openOrderCount: orders.filter((order) =>
       ["pending", "confirmed", "processing", "ready"].includes(order.orderStatus),
@@ -246,11 +271,65 @@ export async function getDashboardOverview() {
     paidTotal: orders
       .filter((order) => order.paymentStatus === "paid")
       .reduce((sum, order) => sum + order.total, 0),
-    stockAttention,
+    soldOutItems: ((menuResult.data ?? []) as Array<{ name: string }>).map((item) => item.name),
+    lowStockItems,
+    stockAttention: lowStockItems.length,
     error:
       ordersResult.error?.message ??
       customerCountResult.error?.message ??
-      inventoryResult.error?.message,
+      inventoryResult.error?.message ??
+      menuResult.error?.message,
+  };
+}
+
+function optionLevelKind(value: unknown): OptionLevelKind {
+  return value === "ice" ? "ice" : "sugar";
+}
+
+function optionLevelDTO(row: JsonRecord): MenuOptionLevelDTO {
+  return {
+    id: text(row.id),
+    kind: optionLevelKind(row.kind),
+    name: text(row.name),
+    sortOrder: number(row.sort_order),
+    isDefault: Boolean(row.is_default),
+    isActive: row.is_active !== false,
+    createdAt: text(row.created_at),
+    updatedAt: text(row.updated_at),
+  };
+}
+
+export async function getOptionLevelsPageData() {
+  const { supabase } = await getDashboardContext();
+  const { data, error } = await supabase
+    .from("menu_option_levels")
+    .select("id, kind, name, sort_order, is_default, is_active, created_at, updated_at")
+    .order("sort_order", { ascending: true });
+
+  const levels = ((data ?? []) as JsonRecord[]).map(optionLevelDTO);
+
+  return {
+    sugarLevels: levels.filter((level) => level.kind === "sugar"),
+    iceLevels: levels.filter((level) => level.kind === "ice"),
+    levels,
+    error: error?.message,
+  };
+}
+
+export async function getPublicOptionLevels() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("menu_option_levels")
+    .select("id, kind, name, sort_order, is_default, is_active, created_at, updated_at")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  const levels = ((data ?? []) as JsonRecord[]).map(optionLevelDTO);
+  return {
+    sugar: levels.filter((level) => level.kind === "sugar"),
+    ice: levels.filter((level) => level.kind === "ice"),
   };
 }
 

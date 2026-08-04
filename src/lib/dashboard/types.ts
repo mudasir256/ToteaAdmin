@@ -17,6 +17,19 @@ export type InventoryStatus =
   | "failed";
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded" | "cancelled";
 
+export type OptionLevelKind = "sugar" | "ice";
+
+export type MenuOptionLevelDTO = {
+  id: string;
+  kind: OptionLevelKind;
+  name: string;
+  sortOrder: number;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OrderItemDTO = {
   menuItemId: string;
   name: string;

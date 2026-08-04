@@ -1,29 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --surface: #fbfdfd;
+  /* Warm paper & amber palette from the Totea admin redesign */
+  --surface: #faf6f0;
   --surface-raised: #ffffff;
-  --surface-tint: #eef8f6;
-  --foreground: #193943;
-  --muted: #60757c;
-  --line: #d7e5e4;
-  --accent: #a86100;
-  --accent-strong: #8f5200;
-  --accent-soft: #fff2d9;
+  --surface-tint: #f7f3ec;
+  --foreground: #4a3626;
+  --muted: #8a7d6f;
+  --line: #e7ddd1;
+  --accent: #b8762f;
+  --accent-strong: #8f5c22;
+  --accent-soft: #fdf1dc;
+  --green: #5a7a52;
+  --green-soft: #e9f2e6;
+  --red: #b23b3b;
+  --red-soft: #fdeceb;
   --background: var(--surface);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2 {
+  font-family: var(--font-fraunces), Georgia, serif;
 }
 
 ::selection {

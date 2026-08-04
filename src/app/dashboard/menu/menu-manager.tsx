@@ -1,18 +1,22 @@
 "use client";
 
 import Image from "next/image";
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  IconAdjustmentsHorizontal,
+  type ChangeEvent,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  IconBan,
   IconCheck,
-  IconChevronDown,
-  IconChevronRight,
-  IconCup,
   IconPencil,
   IconPhotoUp,
   IconPlus,
-  IconTags,
+  IconRefresh,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 
 import { createClient } from "@/lib/supabase/client";
@@ -52,13 +56,25 @@ export type MenuItem = {
   menu_item_variants: MenuItemVariant[];
 };
 
-type CategoryForm = {
+export type MenuToppingOption = {
+  id: string;
   name: string;
-  slug: string;
-  description: string;
-  sortOrder: string;
-  isActive: "true" | "false";
+  category: "standard" | "cream";
+  price: number;
+  is_available: boolean;
+  sort_order: number;
 };
+
+export type MenuOptionLevel = {
+  id: string;
+  kind: "sugar" | "ice";
+  name: string;
+  sort_order: number;
+  is_default: boolean;
+  is_active: boolean;
+};
+
+type Availability = "available" | "sold_out" | "draft";
 
 type ItemForm = {
   categoryId: string;
@@ -70,19 +86,74 @@ type ItemForm = {
   ingredients: string;
   calories: string;
   allergens: string;
-  isAvailable: "true" | "false";
+  availability: Availability;
   sortOrder: string;
 };
 
-const fieldClass =
-  "h-11 w-full rounded-xl border border-(--line) bg-white px-3.5 text-sm text-foreground outline-none transition placeholder:text-[#829399] focus:border-(--accent) focus:ring-2 focus:ring-[#a86100]/20";
-const textareaClass =
-  "min-h-24 w-full resize-y rounded-xl border border-(--line) bg-white px-3.5 py-3 text-sm leading-6 text-foreground outline-none transition placeholder:text-[#829399] focus:border-(--accent) focus:ring-2 focus:ring-[#a86100]/20";
+type OptionFormState = {
+  sugarEnabled: boolean;
+  iceEnabled: boolean;
+  standardToppingsEnabled: boolean;
+  creamToppingsEnabled: boolean;
+  defaultSugarLevelId: string | null;
+  defaultIceLevelId: string | null;
+  selectedToppingIds: Set<string>;
+};
+
+type MenuManagerProps = {
+  initialCategories: MenuCategory[];
+  initialItems: MenuItem[];
+  initialToppings: MenuToppingOption[];
+  initialOptionLevels: MenuOptionLevel[];
+  initialError?: string;
+};
+
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 const maxImageSize = 5 * 1024 * 1024;
 
-function blankCategory(): CategoryForm {
-  return { name: "", slug: "", description: "", sortOrder: "0", isActive: "true" };
+const slideInputClass =
+  "h-10 w-full rounded-lg border border-(--line) bg-white px-3 text-[13px] text-foreground outline-none transition focus:border-(--accent) focus:ring-2 focus:ring-[#b8762f]/20";
+const slideTextareaClass =
+  "min-h-[60px] w-full resize-y rounded-lg border border-(--line) bg-white px-3 py-2.5 text-[13px] leading-6 text-foreground outline-none transition focus:border-(--accent) focus:ring-2 focus:ring-[#b8762f]/20";
+const chipBase =
+  "rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition";
+
+const availabilityOptions: Array<{
+  value: Availability;
+  label: string;
+  activeClass: string;
+}> = [
+  { value: "available", label: "✓ Available", activeClass: "bg-(--green-soft) text-(--green)" },
+  { value: "sold_out", label: "⛔ Sold Out", activeClass: "bg-(--red-soft) text-(--red)" },
+  { value: "draft", label: "Draft", activeClass: "bg-(--surface-tint) text-(--muted)" },
+];
+
+/** Screenshot defaults — used when menu_option_levels isn't seeded yet. */
+const FALLBACK_OPTION_LEVELS: MenuOptionLevel[] = [
+  { id: "fallback-sugar-0", kind: "sugar", name: "Less Sugar", sort_order: 0, is_default: true, is_active: true },
+  { id: "fallback-sugar-1", kind: "sugar", name: "Light Sugar", sort_order: 1, is_default: false, is_active: true },
+  { id: "fallback-sugar-2", kind: "sugar", name: "Minimal Sugar", sort_order: 2, is_default: false, is_active: true },
+  { id: "fallback-sugar-3", kind: "sugar", name: "No Added", sort_order: 3, is_default: false, is_active: true },
+  { id: "fallback-sugar-4", kind: "sugar", name: "Super Sweet", sort_order: 4, is_default: false, is_active: true },
+  { id: "fallback-ice-0", kind: "ice", name: "No Ice", sort_order: 0, is_default: false, is_active: true },
+  { id: "fallback-ice-1", kind: "ice", name: "Less Ice", sort_order: 1, is_default: false, is_active: true },
+  { id: "fallback-ice-2", kind: "ice", name: "Normal Ice", sort_order: 2, is_default: true, is_active: true },
+  { id: "fallback-ice-3", kind: "ice", name: "More Ice", sort_order: 3, is_default: false, is_active: true },
+];
+
+function resolveOptionLevels(levels: MenuOptionLevel[]) {
+  const active = levels.filter((level) => level.is_active);
+  const hasSugar = active.some((level) => level.kind === "sugar");
+  const hasIce = active.some((level) => level.kind === "ice");
+  if (hasSugar && hasIce) return active;
+  return [
+    ...(hasSugar ? active.filter((level) => level.kind === "sugar") : FALLBACK_OPTION_LEVELS.filter((level) => level.kind === "sugar")),
+    ...(hasIce ? active.filter((level) => level.kind === "ice") : FALLBACK_OPTION_LEVELS.filter((level) => level.kind === "ice")),
+  ];
+}
+
+function isPersistedLevelId(id: string | null) {
+  return Boolean(id && !id.startsWith("fallback-"));
 }
 
 function blankItem(categoryId = ""): ItemForm {
@@ -96,37 +167,175 @@ function blankItem(categoryId = ""): ItemForm {
       { size: "Regular", price: "" },
       { size: "Large", price: "" },
     ],
-    ingredients: "",
+    ingredients: "See product details",
     calories: "",
-    allergens: "",
-    isAvailable: "false",
+    allergens: "See product details",
+    availability: "draft",
     sortOrder: "0",
   };
 }
 
-type MenuManagerProps = {
-  initialCategories: MenuCategory[];
-  initialItems: MenuItem[];
-  initialError?: string;
-};
+function imagePathFromPublicUrl(imageUrl: string) {
+  const marker = "/storage/v1/object/public/menu-images/";
+  const markerIndex = imageUrl.indexOf(marker);
+  return markerIndex === -1 ? null : decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
+}
 
-export function MenuManager({ initialCategories, initialItems, initialError }: MenuManagerProps) {
-  const [section, setSection] = useState<"items" | "categories">("items");
+function sortedVariants(item: MenuItem) {
+  const variants = [...(item.menu_item_variants ?? [])].sort(
+    (left, right) => left.sort_order - right.sort_order,
+  );
+  if (variants.length > 0) return variants;
+
+  return item.sizes
+    .split(",")
+    .map((size) => size.trim())
+    .filter(Boolean)
+    .map((size, index) => ({
+      id: `legacy-${index}-${size}`,
+      size,
+      price: item.price,
+      sort_order: index,
+    }));
+}
+
+function menuCategoryName(category: MenuItem["menu_categories"]) {
+  if (Array.isArray(category)) return category[0]?.name ?? "Uncategorized";
+  return category?.name ?? "Uncategorized";
+}
+
+function priceLabel(item: MenuItem) {
+  const variants = sortedVariants(item);
+  if (variants.length === 0) return `$${Number(item.price).toFixed(2)}`;
+  const prices = variants.map((variant) => Number(variant.price));
+  const lowest = Math.min(...prices);
+  return prices.length > 1 ? `from $${lowest.toFixed(2)}` : `$${lowest.toFixed(2)}`;
+}
+
+function availabilityFromItem(item: MenuItem): Availability {
+  if (item.is_available) return "available";
+  if (item.recipe_required) return "draft";
+  return "sold_out";
+}
+
+function defaultLevelId(levels: MenuOptionLevel[], kind: "sugar" | "ice") {
+  const filtered = levels.filter((level) => level.kind === kind && level.is_active);
+  return filtered.find((level) => level.is_default)?.id ?? filtered[0]?.id ?? null;
+}
+
+function defaultSelectedToppingIds(toppings: MenuToppingOption[]) {
+  return new Set(toppings.filter((topping) => topping.is_available).map((topping) => topping.id));
+}
+
+function defaultOptionState(
+  toppings: MenuToppingOption[],
+  levels: MenuOptionLevel[],
+): OptionFormState {
+  return {
+    sugarEnabled: true,
+    iceEnabled: true,
+    standardToppingsEnabled: true,
+    creamToppingsEnabled: true,
+    defaultSugarLevelId: defaultLevelId(levels, "sugar"),
+    defaultIceLevelId: defaultLevelId(levels, "ice"),
+    selectedToppingIds: defaultSelectedToppingIds(toppings),
+  };
+}
+
+function isMissingTableError(message: string | null | undefined) {
+  if (!message) return false;
+  return (
+    message.includes("schema cache") ||
+    message.includes("does not exist") ||
+    message.includes("menu_item_option_settings") ||
+    message.includes("menu_item_toppings")
+  );
+}
+
+function toppingLabel(topping: MenuToppingOption) {
+  if (topping.price === 0) return `${topping.name} — Free`;
+  return topping.name;
+}
+
+export function MenuManager({
+  initialCategories,
+  initialItems,
+  initialToppings,
+  initialOptionLevels,
+  initialError,
+}: MenuManagerProps) {
   const [categories, setCategories] = useState(initialCategories);
   const [items, setItems] = useState(initialItems);
-  const [categoryForm, setCategoryForm] = useState<CategoryForm>(blankCategory);
-  const [itemForm, setItemForm] = useState<ItemForm>(() => blankItem(initialCategories[0]?.id));
-  const [itemImageFile, setItemImageFile] = useState<File | null>(null);
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [statusMenu, setStatusMenu] = useState<{ itemId: string; top: number; left: number } | null>(null);
+  const [slideoverOpen, setSlideoverOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [itemForm, setItemForm] = useState<ItemForm>(() => blankItem(initialCategories[0]?.id));
+  const optionLevels = useMemo(
+    () => resolveOptionLevels(initialOptionLevels),
+    [initialOptionLevels],
+  );
+
+  const [optionForm, setOptionForm] = useState<OptionFormState>(() =>
+    defaultOptionState(initialToppings, resolveOptionLevels(initialOptionLevels)),
+  );
+  const [itemImageFile, setItemImageFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
+  const [optionsWarning, setOptionsWarning] = useState<string | null>(null);
 
-  const categoryCount = useMemo(
-    () => new Map(categories.map((category) => [category.id, items.filter((item) => item.category_id === category.id).length])),
-    [categories, items],
+  const sugarLevels = useMemo(
+    () =>
+      optionLevels
+        .filter((level) => level.kind === "sugar")
+        .sort((left, right) => left.sort_order - right.sort_order),
+    [optionLevels],
   );
+
+  const iceLevels = useMemo(
+    () =>
+      optionLevels
+        .filter((level) => level.kind === "ice")
+        .sort((left, right) => left.sort_order - right.sort_order),
+    [optionLevels],
+  );
+
+  const standardToppings = useMemo(
+    () =>
+      initialToppings
+        .filter((topping) => topping.category === "standard")
+        .sort((left, right) => left.sort_order - right.sort_order),
+    [initialToppings],
+  );
+
+  const creamToppings = useMemo(
+    () =>
+      initialToppings
+        .filter((topping) => topping.category === "cream")
+        .sort((left, right) => left.sort_order - right.sort_order),
+    [initialToppings],
+  );
+
+  const editingItem = useMemo(
+    () => items.find((item) => item.id === editingItemId) ?? null,
+    [editingItemId, items],
+  );
+
+  const selectedCategoryName = useMemo(
+    () => categories.find((category) => category.id === itemForm.categoryId)?.name ?? "Uncategorized",
+    [categories, itemForm.categoryId],
+  );
+
+  useEffect(() => {
+    if (!statusMenu) return;
+    function close() {
+      setStatusMenu(null);
+    }
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [statusMenu]);
 
   async function loadCatalog() {
     setIsLoading(true);
@@ -138,12 +347,18 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
         .order("sort_order", { ascending: true }),
       supabase
         .from("menu_items")
-        .select("id, category_id, name, slug, description, image_url, price, sizes, ingredients, calories, allergens, is_available, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)")
+        .select(
+          "id, category_id, name, slug, description, image_url, price, sizes, ingredients, calories, allergens, is_available, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)",
+        )
         .order("sort_order", { ascending: true }),
     ]);
 
     if (categoriesResult.error || itemsResult.error) {
-      setError(categoriesResult.error?.message ?? itemsResult.error?.message ?? "Could not load the menu catalog.");
+      setError(
+        categoriesResult.error?.message ??
+          itemsResult.error?.message ??
+          "Could not load the menu catalog.",
+      );
     } else {
       setCategories((categoriesResult.data ?? []) as MenuCategory[]);
       setItems((itemsResult.data ?? []) as MenuItem[]);
@@ -152,24 +367,210 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
     setIsLoading(false);
   }
 
-  function resetCategoryForm() {
-    setCategoryForm(blankCategory());
-    setEditingCategoryId(null);
-    setError(null);
+  async function loadItemOptions(itemId: string): Promise<OptionFormState | null> {
+    const supabase = createClient();
+    const [settingsResult, toppingsResult] = await Promise.all([
+      supabase.from("menu_item_option_settings").select("*").eq("menu_item_id", itemId).maybeSingle(),
+      supabase.from("menu_item_toppings").select("topping_id").eq("menu_item_id", itemId),
+    ]);
+
+    if (
+      isMissingTableError(settingsResult.error?.message) ||
+      isMissingTableError(toppingsResult.error?.message)
+    ) {
+      return null;
+    }
+
+    if (settingsResult.error || toppingsResult.error) {
+      return null;
+    }
+
+    const settings = settingsResult.data;
+    const toppingIds = toppingsResult.data?.map((row) => row.topping_id) ?? [];
+
+    if (!settings && toppingIds.length === 0) {
+      return null;
+    }
+
+    return {
+      sugarEnabled: settings?.sugar_enabled ?? true,
+      iceEnabled: settings?.ice_enabled ?? true,
+      standardToppingsEnabled: settings?.standard_toppings_enabled ?? true,
+      creamToppingsEnabled: settings?.cream_toppings_enabled ?? true,
+      defaultSugarLevelId:
+        settings?.default_sugar_level_id ?? defaultLevelId(optionLevels, "sugar"),
+      defaultIceLevelId: settings?.default_ice_level_id ?? defaultLevelId(optionLevels, "ice"),
+      selectedToppingIds:
+        toppingIds.length > 0
+          ? new Set(toppingIds)
+          : defaultSelectedToppingIds(initialToppings),
+    };
   }
 
-  function resetItemForm() {
-    setItemForm(blankItem(categories[0]?.id));
-    setItemImageFile(null);
+  async function resolveMenuItemId(slug: string) {
+    const supabase = createClient();
+    const { data } = await supabase.from("menu_items").select("id").eq("slug", slug).maybeSingle();
+    return data?.id ?? null;
+  }
+
+  async function persistItemOptions(menuItemId: string, options: OptionFormState) {
+    const supabase = createClient();
+
+    const { error: settingsError } = await supabase.from("menu_item_option_settings").upsert(
+      {
+        menu_item_id: menuItemId,
+        sugar_enabled: options.sugarEnabled,
+        ice_enabled: options.iceEnabled,
+        standard_toppings_enabled: options.standardToppingsEnabled,
+        cream_toppings_enabled: options.creamToppingsEnabled,
+        default_sugar_level_id: isPersistedLevelId(options.defaultSugarLevelId)
+          ? options.defaultSugarLevelId
+          : null,
+        default_ice_level_id: isPersistedLevelId(options.defaultIceLevelId)
+          ? options.defaultIceLevelId
+          : null,
+      },
+      { onConflict: "menu_item_id" },
+    );
+
+    if (settingsError) {
+      if (isMissingTableError(settingsError.message)) {
+        return "Option settings were not saved — run the latest database migration when ready.";
+      }
+      return settingsError.message;
+    }
+
+    const { error: deleteError } = await supabase
+      .from("menu_item_toppings")
+      .delete()
+      .eq("menu_item_id", menuItemId);
+
+    if (deleteError) {
+      if (isMissingTableError(deleteError.message)) {
+        return "Topping selections were not saved — run the latest database migration when ready.";
+      }
+      return deleteError.message;
+    }
+
+    const selectedIdsList = [...options.selectedToppingIds];
+    if (selectedIdsList.length === 0) {
+      return null;
+    }
+
+    const { error: insertError } = await supabase.from("menu_item_toppings").insert(
+      selectedIdsList.map((toppingId) => ({
+        menu_item_id: menuItemId,
+        topping_id: toppingId,
+      })),
+    );
+
+    if (insertError) {
+      if (isMissingTableError(insertError.message)) {
+        return "Topping selections were not saved — run the latest database migration when ready.";
+      }
+      return insertError.message;
+    }
+
+    return null;
+  }
+
+  function toggleRow(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedIds((current) =>
+      current.size === items.length ? new Set() : new Set(items.map((item) => item.id)),
+    );
+  }
+
+  async function setAvailability(ids: string[], isAvailable: boolean) {
+    setError(null);
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("menu_items")
+      .update({ is_available: isAvailable })
+      .in("id", ids);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setItems((current) =>
+      current.map((item) => (ids.includes(item.id) ? { ...item, is_available: isAvailable } : item)),
+    );
+    setSelectedIds(new Set());
+  }
+
+  function openStatusMenu(event: React.MouseEvent, itemId: string) {
+    event.stopPropagation();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    setStatusMenu({ itemId, top: rect.bottom + 6, left: rect.left });
+  }
+
+  function openCreate() {
     setEditingItemId(null);
+    setItemForm(blankItem(categories[0]?.id));
+    setOptionForm(defaultOptionState(initialToppings, optionLevels));
+    setItemImageFile(null);
+    setError(null);
+    setOptionsWarning(null);
+    setIsLoadingOptions(false);
+    setSlideoverOpen(true);
+  }
+
+  async function openEdit(item: MenuItem) {
+    setEditingItemId(item.id);
+    setItemForm({
+      categoryId: item.category_id,
+      name: item.name,
+      slug: item.slug,
+      description: item.description,
+      imageUrl: item.image_url,
+      variants: sortedVariants(item).map((variant) => ({
+        size: variant.size,
+        price: String(variant.price),
+      })),
+      ingredients: item.ingredients,
+      calories: item.calories,
+      allergens: item.allergens,
+      availability: availabilityFromItem(item),
+      sortOrder: String(item.sort_order),
+    });
+    setOptionForm(defaultOptionState(initialToppings, optionLevels));
+    setItemImageFile(null);
+    setError(null);
+    setOptionsWarning(null);
+    setIsLoadingOptions(true);
+    setSlideoverOpen(true);
+
+    const loadedOptions = await loadItemOptions(item.id);
+    if (loadedOptions) {
+      setOptionForm(loadedOptions);
+    }
+    setIsLoadingOptions(false);
+  }
+
+  function closeSlideover() {
+    setSlideoverOpen(false);
+    setEditingItemId(null);
+    setItemImageFile(null);
+    setIsLoadingOptions(false);
+  }
+
+  function clearFormFields() {
+    setItemForm((form) => ({ ...form, description: "" }));
+    setOptionForm(defaultOptionState(initialToppings, optionLevels));
     setError(null);
   }
 
-  function updateVariant(
-    index: number,
-    field: "size" | "price",
-    value: string,
-  ) {
+  function updateVariant(index: number, field: "size" | "price", value: string) {
     setItemForm((form) => ({
       ...form,
       variants: form.variants.map((variant, variantIndex) =>
@@ -179,10 +580,7 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
   }
 
   function addVariant() {
-    setItemForm((form) => ({
-      ...form,
-      variants: [...form.variants, { size: "", price: "" }],
-    }));
+    setItemForm((form) => ({ ...form, variants: [...form.variants, { size: "", price: "" }] }));
   }
 
   function removeVariant(index: number) {
@@ -192,37 +590,38 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
     }));
   }
 
-  async function saveCategory(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setIsSaving(true);
+  function selectItemImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    const payload = {
-      name: categoryForm.name.trim(),
-      slug: categoryForm.slug.trim().toLowerCase(),
-      description: categoryForm.description.trim(),
-      sort_order: Number(categoryForm.sortOrder),
-      is_active: categoryForm.isActive === "true",
-    };
-    const supabase = createClient();
-    const { error: saveError } = editingCategoryId
-      ? await supabase.from("menu_categories").update(payload).eq("id", editingCategoryId)
-      : await supabase.from("menu_categories").insert(payload);
-
-    if (saveError) {
-      setError(saveError.message);
-      setIsSaving(false);
+    if (!allowedImageTypes.has(file.type)) {
+      setError("Choose a JPG, PNG, WebP, or AVIF image.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > maxImageSize) {
+      setError("Image files must be 5 MB or smaller.");
+      event.target.value = "";
       return;
     }
 
-    resetCategoryForm();
-    await loadCatalog();
-    setIsSaving(false);
+    setItemImageFile(file);
+    setError(null);
+  }
+
+  function toggleTopping(toppingId: string) {
+    setOptionForm((current) => {
+      const next = new Set(current.selectedToppingIds);
+      if (next.has(toppingId)) next.delete(toppingId);
+      else next.add(toppingId);
+      return { ...current, selectedToppingIds: next };
+    });
   }
 
   async function saveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setOptionsWarning(null);
     setIsSaving(true);
 
     if (!itemImageFile && !itemForm.imageUrl) {
@@ -239,12 +638,7 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
     const sizeKeys = variants.map((variant) => variant.size.toLowerCase());
     if (
       variants.length === 0 ||
-      variants.some(
-        (variant) =>
-          !variant.size ||
-          !Number.isFinite(variant.price) ||
-          variant.price <= 0,
-      )
+      variants.some((variant) => !variant.size || !Number.isFinite(variant.price) || variant.price <= 0)
     ) {
       setError("Every size needs a name and a price greater than zero.");
       setIsSaving(false);
@@ -278,26 +672,24 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
       uploadedImage = { path, publicUrl: data.publicUrl };
     }
 
+    const slug = itemForm.slug.trim().toLowerCase();
     const payload = {
       category_id: itemForm.categoryId,
       name: itemForm.name.trim(),
-      slug: itemForm.slug.trim().toLowerCase(),
+      slug,
       description: itemForm.description.trim(),
       image_url: uploadedImage?.publicUrl ?? itemForm.imageUrl.trim(),
       ingredients: itemForm.ingredients.trim(),
       calories: itemForm.calories.trim(),
       allergens: itemForm.allergens.trim(),
-      is_available: editingItemId ? itemForm.isAvailable === "true" : false,
+      is_available: itemForm.availability === "available",
       sort_order: Number(itemForm.sortOrder),
     };
-    const { error: saveError } = await supabase.rpc(
-      "save_menu_item_with_variants",
-      {
-        p_menu_item_id: editingItemId,
-        p_item: payload,
-        p_variants: variants,
-      },
-    );
+    const { error: saveError } = await supabase.rpc("save_menu_item_with_variants", {
+      p_menu_item_id: editingItemId,
+      p_item: payload,
+      p_variants: variants,
+    });
 
     if (saveError) {
       if (uploadedImage) {
@@ -313,96 +705,17 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
       await supabase.storage.from("menu-images").remove([previousImagePath]);
     }
 
-    resetItemForm();
-    await loadCatalog();
-    setIsSaving(false);
-  }
-
-  function editCategory(category: MenuCategory) {
-    setSection("categories");
-    setEditingCategoryId(category.id);
-    setCategoryForm({
-      name: category.name,
-      slug: category.slug,
-      description: category.description,
-      sortOrder: String(category.sort_order),
-      isActive: String(category.is_active) as "true" | "false",
-    });
-    setError(null);
-  }
-
-  function editItem(item: MenuItem) {
-    setSection("items");
-    setEditingItemId(item.id);
-    setItemForm({
-      categoryId: item.category_id,
-      name: item.name,
-      slug: item.slug,
-      description: item.description,
-      imageUrl: item.image_url,
-      variants: sortedVariants(item).map((variant) => ({
-        size: variant.size,
-        price: String(variant.price),
-      })),
-      ingredients: item.ingredients,
-      calories: item.calories,
-      allergens: item.allergens,
-      isAvailable: String(item.is_available) as "true" | "false",
-      sortOrder: String(item.sort_order),
-    });
-    setItemImageFile(null);
-    setError(null);
-  }
-
-  function selectItemImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!allowedImageTypes.has(file.type)) {
-      setError("Choose a JPG, PNG, WebP, or AVIF image.");
-      event.target.value = "";
-      return;
-    }
-    if (file.size > maxImageSize) {
-      setError("Image files must be 5 MB or smaller.");
-      event.target.value = "";
-      return;
-    }
-
-    setItemImageFile(file);
-    setError(null);
-  }
-
-  async function deleteCategory(category: MenuCategory) {
-    const itemCount = categoryCount.get(category.id) ?? 0;
-    const message = itemCount
-      ? `Delete ${category.name} and its ${itemCount} menu item${itemCount === 1 ? "" : "s"}?`
-      : `Delete ${category.name}?`;
-    if (!window.confirm(message)) return;
-
-    setError(null);
-    const supabase = createClient();
-    const imagePaths = items
-      .filter((item) => item.category_id === category.id)
-      .map((item) => imagePathFromPublicUrl(item.image_url))
-      .filter((path): path is string => Boolean(path));
-
-    if (imagePaths.length) {
-      const { error: imageError } = await supabase.storage.from("menu-images").remove(imagePaths);
-      if (imageError) {
-        setError(`Could not remove the category images: ${imageError.message}`);
-        return;
+    const menuItemId = editingItemId ?? (await resolveMenuItemId(slug));
+    if (menuItemId) {
+      const optionsWarningMessage = await persistItemOptions(menuItemId, optionForm);
+      if (optionsWarningMessage) {
+        setOptionsWarning(optionsWarningMessage);
       }
     }
 
-    const { error: deleteError } = await supabase.from("menu_categories").delete().eq("id", category.id);
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
-    }
-
-    if (editingCategoryId === category.id) resetCategoryForm();
+    closeSlideover();
     await loadCatalog();
+    setIsSaving(false);
   }
 
   async function deleteItem(item: MenuItem) {
@@ -425,287 +738,665 @@ export function MenuManager({ initialCategories, initialItems, initialError }: M
       return;
     }
 
-    if (editingItemId === item.id) resetItemForm();
+    if (editingItemId === item.id) closeSlideover();
     await loadCatalog();
   }
 
+  const selectedCount = selectedIds.size;
+
   return (
-    <div className="py-6 sm:py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-xl border border-(--line) bg-(--surface-raised) p-1" role="tablist" aria-label="Menu catalog sections">
+    <div>
+      <div className="mb-[18px] flex flex-wrap items-center justify-between gap-2.5">
+        <div>
+          <h1 className="font-serif text-xl font-bold text-foreground">
+            Menu items <span className="font-sans text-base font-normal text-(--muted)">· {items.length}</span>
+          </h1>
+          <p className="mt-0.5 text-xs text-(--muted)">
+            Click a status pill to change it instantly. Select rows for bulk actions. Click the pencil for full details.
+          </p>
+        </div>
+        <div className="flex gap-2">
           <button
             type="button"
-            role="tab"
-            aria-selected={section === "items"}
-            onClick={() => setSection("items")}
-            className={`inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${section === "items" ? "bg-foreground text-white shadow-sm" : "text-(--muted) hover:text-foreground"}`}
+            onClick={() => void loadCatalog()}
+            disabled={isLoading}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[9px] border border-(--line) bg-white px-4 text-[12.5px] font-semibold text-foreground transition hover:border-(--accent) hover:text-(--accent-strong) disabled:opacity-60"
           >
-            <IconCup size={16} stroke={1.9} aria-hidden={true} /> Menu items <span className="text-xs opacity-70">{items.length}</span>
+            <IconRefresh size={15} stroke={2} aria-hidden />
+            {isLoading ? "Refreshing..." : "Refresh Menu"}
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={section === "categories"}
-            onClick={() => setSection("categories")}
-            className={`inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${section === "categories" ? "bg-foreground text-white shadow-sm" : "text-(--muted) hover:text-foreground"}`}
+            onClick={openCreate}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[9px] border border-(--accent) bg-(--accent) px-4 text-[12.5px] font-semibold text-white transition hover:bg-(--accent-strong)"
           >
-            <IconTags size={16} stroke={1.9} aria-hidden={true} /> Categories <span className="text-xs opacity-70">{categories.length}</span>
+            <IconPlus size={15} stroke={2.2} aria-hidden />
+            Add item
           </button>
         </div>
-        <button type="button" onClick={() => void loadCatalog()} disabled={isLoading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-(--line) bg-(--surface-raised) px-3.5 text-sm font-semibold text-(--muted) outline-none transition hover:border-(--accent) hover:text-(--accent-strong) focus-visible:ring-2 focus-visible:ring-(--accent) disabled:opacity-60">
-          <IconAdjustmentsHorizontal size={17} stroke={1.8} aria-hidden={true} /> {isLoading ? "Refreshing..." : "Refresh catalog"}
-        </button>
       </div>
 
-      {error ? <p role="alert" className="mt-5 rounded-xl border border-[#c98b26]/35 bg-(--accent-soft) px-4 py-3 text-sm leading-6 text-[#7a4d00]">{error}</p> : null}
+      {error && !slideoverOpen ? (
+        <p
+          role="alert"
+          className="mb-3.5 rounded-xl border border-dashed border-[#d9b57a] bg-[#fdf3e3] px-3 py-2.5 text-xs leading-5 text-(--accent-strong)"
+        >
+          {error}
+        </p>
+      ) : null}
 
-      {section === "categories" ? (
-        <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,0.82fr)_minmax(360px,1.18fr)]">
-          <form onSubmit={saveCategory} className="rounded-2xl border border-(--line) bg-(--surface-raised) p-5 shadow-[0_18px_45px_rgba(21,58,67,0.05)] sm:p-6">
-            <FormHeading icon={<IconTags size={18} stroke={1.8} aria-hidden={true} />} title={editingCategoryId ? "Edit category" : "Add a category"} copy="Categories organize the drinks on the public menu." />
-            <div className="mt-6 grid gap-4">
-              <Field label="Category name"><input required value={categoryForm.name} onChange={(event) => setCategoryForm((form) => ({ ...form, name: event.target.value }))} className={fieldClass} placeholder="Vietnamese Coffee" maxLength={80} /></Field>
-              <Field label="Slug"><input required value={categoryForm.slug} onChange={(event) => setCategoryForm((form) => ({ ...form, slug: event.target.value }))} className={fieldClass} placeholder="vietnamese-coffee" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={100} /></Field>
-              <Field label="Description"><textarea required value={categoryForm.description} onChange={(event) => setCategoryForm((form) => ({ ...form, description: event.target.value }))} className={textareaClass} placeholder="A short description for this category" maxLength={300} /></Field>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Display order"><input required type="number" min="0" step="1" value={categoryForm.sortOrder} onChange={(event) => setCategoryForm((form) => ({ ...form, sortOrder: event.target.value }))} className={fieldClass} /></Field>
-                <Field label="Visibility"><DropdownSelect value={categoryForm.isActive} onValueChange={(value) => setCategoryForm((form) => ({ ...form, isActive: value as "true" | "false" }))} ariaLabel="Category visibility" options={[{ value: "true", label: "Active" }, { value: "false", label: "Hidden" }]} /></Field>
-              </div>
-            </div>
-            <FormActions saving={isSaving} editing={Boolean(editingCategoryId)} saveLabel="Save category" createLabel="Create category" onCancel={resetCategoryForm} />
-          </form>
-          <section className="overflow-hidden rounded-2xl border border-(--line) bg-(--surface-raised) shadow-[0_18px_45px_rgba(21,58,67,0.04)]">
-            <div className="flex items-start justify-between gap-4 border-b border-(--line) px-5 py-5 sm:px-6"><div><p className="text-base font-semibold text-foreground">Category shelf</p><p className="mt-1 text-sm text-(--muted)">Order and visibility are reflected on the menu.</p></div><span className="grid size-9 place-items-center rounded-xl bg-(--surface-tint) text-foreground"><IconTags size={18} stroke={1.8} aria-hidden={true} /></span></div>
-            {categories.length === 0 ? <EmptyState title="No categories yet" copy="Create a category before adding menu items." /> : <div className="divide-y divide-(--line)">{categories.map((category) => <article key={category.id} className="group flex items-start gap-4 px-5 py-5 sm:px-6"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-(--accent-soft) text-sm font-bold text-(--accent)">{String(category.sort_order + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-foreground">{category.name}</p><Status active={category.is_active} activeLabel="Active" inactiveLabel="Hidden" /></div><p className="mt-1 text-sm leading-6 text-(--muted)">{category.description}</p><p className="mt-2 text-xs font-medium text-[#789096]">{categoryCount.get(category.id) ?? 0} menu item{(categoryCount.get(category.id) ?? 0) === 1 ? "" : "s"} <span aria-hidden={true}>Ã‚Â·</span> /{category.slug}</p></div><RowActions onEdit={() => editCategory(category)} onDelete={() => void deleteCategory(category)} label={category.name} /></article>)}</div>}
-          </section>
+      {optionsWarning && !slideoverOpen ? (
+        <p className="mb-3.5 rounded-xl border border-dashed border-(--line) bg-(--surface-tint) px-3 py-2.5 text-xs leading-5 text-(--muted)">
+          {optionsWarning}
+        </p>
+      ) : null}
+
+      {selectedCount > 0 ? (
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl bg-[#3f2f22] px-[18px] py-3 text-white">
+          <span className="text-[12.5px]">
+            <b>{selectedCount} selected</b>
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void setAvailability([...selectedIds], false)}
+              className="rounded-lg bg-white/12 px-3 py-2 text-xs font-semibold transition hover:bg-white/20"
+            >
+              ⛔ Mark Sold Out
+            </button>
+            <button
+              type="button"
+              onClick={() => void setAvailability([...selectedIds], true)}
+              className="rounded-lg bg-white/12 px-3 py-2 text-xs font-semibold transition hover:bg-white/20"
+            >
+              ✓ Mark Available
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-lg bg-white/12 px-3 py-2 text-xs font-semibold transition hover:bg-white/20"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
-          <form onSubmit={saveItem} className="rounded-2xl border border-(--line) bg-(--surface-raised) p-5 shadow-[0_18px_45px_rgba(21,58,67,0.05)] sm:p-6">
-            <FormHeading icon={<IconCup size={18} stroke={1.8} aria-hidden={true} />} title={editingItemId ? "Edit menu item" : "Add a menu item"} copy={editingItemId ? "Update the product details customers read on the menu." : "New products are saved as drafts until every size has a recipe."} />
-            {categories.length === 0 ? <div className="mt-6 rounded-xl border border-dashed border-(--line) bg-(--surface-tint) p-5"><p className="font-semibold text-foreground">Create a category first</p><p className="mt-1 text-sm leading-6 text-(--muted)">Every menu item must belong to a category.</p><button type="button" onClick={() => setSection("categories")} className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-4 text-sm font-semibold text-white transition hover:bg-[#24505c]"><IconChevronRight size={17} aria-hidden={true} /> Go to categories</button></div> : <>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <Field label="Category"><DropdownSelect value={itemForm.categoryId} onValueChange={(value) => setItemForm((form) => ({ ...form, categoryId: value }))} ariaLabel="Menu item category" options={categories.map((category) => ({ value: category.id, label: category.name }))} /></Field>
-                <Field label="Menu item name"><input required value={itemForm.name} onChange={(event) => setItemForm((form) => ({ ...form, name: event.target.value }))} className={fieldClass} placeholder="Vietnamese Sea Salt Coffee" maxLength={120} /></Field>
-                <Field label="Slug"><input required value={itemForm.slug} onChange={(event) => setItemForm((form) => ({ ...form, slug: event.target.value }))} className={fieldClass} placeholder="vietnamese-sea-salt-coffee" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={100} /></Field>
-                <div className="sm:col-span-2"><ImageUploadField file={itemImageFile} hasCurrentImage={Boolean(itemForm.imageUrl)} required={!editingItemId && !itemForm.imageUrl} onChange={selectItemImage} /></div>
-              </div>
-              <div className="mt-4"><Field label="Description"><textarea required value={itemForm.description} onChange={(event) => setItemForm((form) => ({ ...form, description: event.target.value }))} className={textareaClass} placeholder="Describe the drink in the words customers will read." maxLength={1000} /></Field></div>
-              <div className="mt-4">
-                <SizePriceEditor
-                  variants={itemForm.variants}
-                  onAdd={addVariant}
-                  onRemove={removeVariant}
-                  onChange={updateVariant}
-                />
-              </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Field label="Calories"><input required value={itemForm.calories} onChange={(event) => setItemForm((form) => ({ ...form, calories: event.target.value }))} className={fieldClass} placeholder="180Ã¢â‚¬â€œ250 cal" maxLength={60} /></Field>
-                <Field label="Ingredients"><textarea required value={itemForm.ingredients} onChange={(event) => setItemForm((form) => ({ ...form, ingredients: event.target.value }))} className={textareaClass} placeholder="Vietnamese Coffee, Sea Salt Cream..." maxLength={1000} /></Field>
-                <Field label="Allergens"><textarea required value={itemForm.allergens} onChange={(event) => setItemForm((form) => ({ ...form, allergens: event.target.value }))} className={textareaClass} placeholder="Dairy" maxLength={200} /></Field>
-                <Field label="Availability"><DropdownSelect value={itemForm.isAvailable} onValueChange={(value) => setItemForm((form) => ({ ...form, isAvailable: value as "true" | "false" }))} ariaLabel="Menu item availability" options={editingItemId ? [{ value: "true", label: "Available" }, { value: "false", label: "Draft / unavailable" }] : [{ value: "false", label: "Draft — add recipes before publishing" }]} /></Field>
-                <Field label="Display order"><input required type="number" min="0" step="1" value={itemForm.sortOrder} onChange={(event) => setItemForm((form) => ({ ...form, sortOrder: event.target.value }))} className={fieldClass} /></Field>
-              </div>
-              <FormActions saving={isSaving} editing={Boolean(editingItemId)} saveLabel="Save menu item" createLabel="Create menu item" onCancel={resetItemForm} />
-            </>}
-          </form>
-          <section className="overflow-hidden rounded-2xl border border-(--line) bg-(--surface-raised) shadow-[0_18px_45px_rgba(21,58,67,0.04)]">
-            <div className="flex items-start justify-between gap-4 border-b border-(--line) px-5 py-5 sm:px-6"><div><p className="text-base font-semibold text-foreground">Menu board</p><p className="mt-1 text-sm text-(--muted)">Products customers can see and order.</p></div><span className="grid size-9 place-items-center rounded-xl bg-(--accent-soft) text-(--accent)"><IconCup size={18} stroke={1.8} aria-hidden={true} /></span></div>
-            {items.length === 0 ? (
-              <EmptyState
-                title="No menu items yet"
-                copy={categories.length ? "Add the first drink to start building the menu." : "Create the first drink and upload its product image."}
-              />
-            ) : (
-              <div className="divide-y divide-(--line)">
-                {items.map((item) => (
-                  <article key={item.id} className="group px-5 py-5 sm:px-6">
-                    <div className="flex items-start gap-3">
-                      <Image src={item.image_url} alt="" width={80} height={80} className="size-10 shrink-0 rounded-xl border border-(--line) bg-(--surface-tint) object-cover" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-foreground">{item.name}</p>
-                          <Status active={item.is_available} activeLabel="Available" inactiveLabel="Off menu" />
-                        </div>
-                        <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-(--accent)">
-                          {menuCategoryName(item.menu_categories)}
-                        </p>
-                      </div>
-                      <RowActions onEdit={() => editItem(item)} onDelete={() => void deleteItem(item)} label={item.name} />
-                    </div>
-                    <p className="mt-4 text-sm leading-6 text-(--muted)">{item.description}</p>
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-medium">
-                      {sortedVariants(item).map((variant) => (
-                        <span key={variant.id} className="rounded-lg bg-(--accent-soft) px-2.5 py-1.5 text-(--accent-strong)">
-                          {variant.size} · ${Number(variant.price).toFixed(2)}
-                        </span>
-                      ))}
-                      <span className="rounded-lg bg-(--surface-tint) px-2.5 py-1.5 text-(--muted)">{item.calories}</span>
-                    </div>
-                  </article>
+      ) : null}
+
+      <div className="overflow-hidden rounded-[14px] border border-(--line) bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse">
+            <thead>
+              <tr>
+                <th className="w-[34px] border-b border-(--line) bg-[#fbf8f3] px-3.5 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && selectedCount === items.length}
+                    onChange={toggleAll}
+                    aria-label="Select all menu items"
+                    className="accent-(--accent)"
+                  />
+                </th>
+                {["Item", "Category", "Price", "Status"].map((heading) => (
+                  <th
+                    key={heading}
+                    className="border-b border-(--line) bg-[#fbf8f3] px-3.5 py-3 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-(--muted)"
+                  >
+                    {heading}
+                  </th>
                 ))}
-              </div>
-            )}
-          </section>
+                <th className="w-[84px] border-b border-(--line) bg-[#fbf8f3] px-3.5 py-3 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-(--muted)">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-14 text-center text-[12.5px] text-(--muted)">
+                    {categories.length === 0
+                      ? "Create a category first, then add the first drink."
+                      : "No menu items yet — add the first drink."}
+                  </td>
+                </tr>
+              ) : (
+                items.map((item) => (
+                  <tr key={item.id} className="border-b border-(--line) transition last:border-b-0 hover:bg-[#fcfaf6]">
+                    <td className="px-3.5 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleRow(item.id)}
+                        aria-label={`Select ${item.name}`}
+                        className="accent-(--accent)"
+                      />
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <Image
+                          src={item.image_url}
+                          alt=""
+                          width={76}
+                          height={76}
+                          className="size-[38px] shrink-0 rounded-lg border border-(--line) bg-(--surface-tint) object-cover"
+                        />
+                        <span className="text-[13px] font-medium text-foreground">{item.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <span className="whitespace-nowrap rounded-[10px] bg-(--accent-soft) px-2.5 py-1 text-[10.5px] font-bold text-(--accent-strong)">
+                        {menuCategoryName(item.menu_categories)}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 text-[13px] text-foreground">{priceLabel(item)}</td>
+                    <td className="px-3.5 py-2.5">
+                      <button
+                        type="button"
+                        onClick={(event) => openStatusMenu(event, item.id)}
+                        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-[20px] px-2.5 py-[5px] text-[11px] font-bold ${
+                          item.is_available
+                            ? "bg-(--green-soft) text-(--green)"
+                            : "bg-(--red-soft) text-(--red)"
+                        }`}
+                      >
+                        {item.is_available ? (
+                          <>
+                            <IconCheck size={12} stroke={2.6} aria-hidden /> Available
+                          </>
+                        ) : (
+                          <>
+                            <IconBan size={12} stroke={2.4} aria-hidden /> Sold Out
+                          </>
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <div className="flex gap-1 text-(--muted)">
+                        <button
+                          type="button"
+                          onClick={() => void openEdit(item)}
+                          className="grid size-8 place-items-center rounded-lg transition hover:bg-(--surface-tint) hover:text-foreground"
+                          aria-label={`Edit ${item.name}`}
+                        >
+                          <IconPencil size={16} stroke={1.8} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteItem(item)}
+                          className="grid size-8 place-items-center rounded-lg transition hover:bg-(--red-soft) hover:text-(--red)"
+                          aria-label={`Delete ${item.name}`}
+                        >
+                          <IconTrash size={16} stroke={1.8} aria-hidden />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+        <div className="px-4 py-3 text-[11.5px] text-(--muted)">
+          Showing {items.length} of {items.length} items
+        </div>
+      </div>
+
+      {statusMenu ? (
+        <div
+          className="fixed z-50 min-w-[170px] rounded-[9px] border border-(--line) bg-white p-[5px] shadow-[0_10px_26px_rgba(0,0,0,0.12)]"
+          style={{ top: statusMenu.top, left: statusMenu.left }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              void setAvailability([statusMenu.itemId], true);
+              setStatusMenu(null);
+            }}
+            className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-2 text-left text-xs font-semibold text-(--green) transition hover:bg-(--surface)"
+          >
+            <IconCheck size={13} stroke={2.4} aria-hidden /> Available
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void setAvailability([statusMenu.itemId], false);
+              setStatusMenu(null);
+            }}
+            className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-2 text-left text-xs font-semibold text-(--red) transition hover:bg-(--surface)"
+          >
+            <IconBan size={13} stroke={2.2} aria-hidden /> Sold Out
+          </button>
+        </div>
+      ) : null}
+
+      {slideoverOpen ? (
+        <>
+          <div className="fixed inset-0 z-[60] bg-[#4a3626]/40" onClick={closeSlideover} aria-hidden />
+          <form
+            onSubmit={saveItem}
+            className="fixed right-0 top-0 z-[61] flex h-dvh w-[600px] max-w-[94vw] flex-col bg-white shadow-[-10px_0_40px_rgba(0,0,0,0.15)]"
+          >
+            <header className="flex items-center justify-between gap-4 border-b border-(--line) px-6 py-[18px]">
+              <div>
+                <p className="font-serif text-[17px] font-semibold text-foreground">
+                  {editingItem ? itemForm.name || editingItem.name : "Add a menu item"}
+                </p>
+                <p className="mt-0.5 text-[11px] text-(--muted)">
+                  {editingItem
+                    ? `${selectedCategoryName} · Editing existing item`
+                    : "New items are saved as drafts until every size has a recipe."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSlideover}
+                className="grid size-8 shrink-0 place-items-center rounded-full bg-(--surface) text-foreground transition hover:bg-(--surface-tint)"
+                aria-label="Close editor"
+              >
+                <IconX size={15} stroke={2} aria-hidden />
+              </button>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-[22px]">
+              {categories.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-(--line) bg-(--surface-tint) px-4 py-5 text-[12.5px] text-(--muted)">
+                  Create a category first — every menu item must belong to a category.
+                </p>
+              ) : (
+                <>
+                  <SlideField label="Menu image">
+                    <label className="flex cursor-pointer items-center gap-3 rounded-[10px] border-[1.5px] border-dashed border-(--line) bg-[#fafcf9] p-3 transition hover:border-(--accent)">
+                      {itemForm.imageUrl && !itemImageFile ? (
+                        <Image
+                          src={itemForm.imageUrl}
+                          alt=""
+                          width={48}
+                          height={48}
+                          className="size-12 shrink-0 rounded-lg border border-(--line) bg-(--surface-tint) object-cover"
+                        />
+                      ) : null}
+                      <IconPhotoUp size={20} stroke={1.7} className="shrink-0 text-(--accent)" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                        {itemImageFile
+                          ? itemImageFile.name
+                          : itemForm.imageUrl
+                            ? "Current image saved — choose a new file to replace it"
+                            : "Choose a product image"}
+                        <span className="block text-[10px] font-normal text-(--muted)">
+                          JPG, PNG, WebP, or AVIF · max 5 MB
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[11.5px] font-bold text-(--accent-strong)">Browse</span>
+                      <input
+                        required={!editingItemId && !itemForm.imageUrl}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/avif"
+                        onChange={selectItemImage}
+                        className="sr-only"
+                      />
+                    </label>
+                  </SlideField>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <SlideField label="Category">
+                      <select
+                        required
+                        value={itemForm.categoryId}
+                        onChange={(event) =>
+                          setItemForm((form) => ({ ...form, categoryId: event.target.value }))
+                        }
+                        className="h-10 w-full rounded-lg border border-(--line) bg-white px-3 text-[13px] text-foreground outline-none transition focus:border-(--accent) focus:ring-2 focus:ring-[#b8762f]/20"
+                      >
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </SlideField>
+                    <SlideField label="Menu item name">
+                      <input
+                        required
+                        value={itemForm.name}
+                        onChange={(event) => setItemForm((form) => ({ ...form, name: event.target.value }))}
+                        className={slideInputClass}
+                        placeholder="Sea Salt Coffee"
+                        maxLength={120}
+                      />
+                    </SlideField>
+                  </div>
+
+                  <SlideField label="Slug">
+                    <input
+                      required
+                      value={itemForm.slug}
+                      onChange={(event) => setItemForm((form) => ({ ...form, slug: event.target.value }))}
+                      className={slideInputClass}
+                      placeholder="sea-salt-coffee"
+                      pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                      maxLength={100}
+                    />
+                  </SlideField>
+
+                  <SlideField label="Description">
+                    <textarea
+                      required
+                      value={itemForm.description}
+                      onChange={(event) =>
+                        setItemForm((form) => ({ ...form, description: event.target.value }))
+                      }
+                      className={slideTextareaClass}
+                      placeholder="Describe the drink in the words customers will read."
+                      maxLength={1000}
+                    />
+                  </SlideField>
+
+                  <SlideField label="Availability">
+                    <div className="flex overflow-hidden rounded-[9px] border border-(--line)">
+                      {availabilityOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() =>
+                            setItemForm((form) => ({ ...form, availability: option.value }))
+                          }
+                          className={`flex-1 px-2 py-2.5 text-center text-xs font-bold transition ${
+                            itemForm.availability === option.value
+                              ? option.activeClass
+                              : "text-(--muted) hover:bg-(--surface)"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </SlideField>
+
+                  <div className="mt-5 border-t border-(--line) pt-[18px]">
+                    <p className="text-sm font-bold text-foreground">Options &amp; Toppings</p>
+                    <p className="mb-3.5 mt-0.5 text-[11px] text-(--muted)">
+                      Lists are managed once (Toppings / Sugar &amp; Ice Levels tabs), referenced here.
+                    </p>
+
+                    {isLoadingOptions ? (
+                      <p className="mb-3 text-[11px] text-(--muted)">Loading item options…</p>
+                    ) : null}
+
+                    <div className="grid gap-3">
+                      <OptionCard
+                        title="Sugar Level"
+                        enabled={optionForm.sugarEnabled}
+                        onToggle={(enabled) => setOptionForm((current) => ({ ...current, sugarEnabled: enabled }))}
+                      >
+                        <div className="flex flex-wrap gap-1.5">
+                          {sugarLevels.map((level) => {
+                            const isDefault = optionForm.defaultSugarLevelId === level.id;
+                            return (
+                              <button
+                                key={level.id}
+                                type="button"
+                                onClick={() =>
+                                  setOptionForm((current) => ({
+                                    ...current,
+                                    defaultSugarLevelId: level.id,
+                                  }))
+                                }
+                                className={
+                                  isDefault
+                                    ? `${chipBase} border-(--accent) bg-(--accent) text-white`
+                                    : `${chipBase} border-(--line) bg-(--surface) text-foreground`
+                                }
+                              >
+                                {level.name}
+                                {isDefault ? " ★" : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </OptionCard>
+
+                      <OptionCard
+                        title="Ice Level"
+                        enabled={optionForm.iceEnabled}
+                        onToggle={(enabled) => setOptionForm((current) => ({ ...current, iceEnabled: enabled }))}
+                      >
+                        <div className="flex flex-wrap gap-1.5">
+                          {iceLevels.map((level) => {
+                            const isDefault = optionForm.defaultIceLevelId === level.id;
+                            return (
+                              <button
+                                key={level.id}
+                                type="button"
+                                onClick={() =>
+                                  setOptionForm((current) => ({
+                                    ...current,
+                                    defaultIceLevelId: level.id,
+                                  }))
+                                }
+                                className={
+                                  isDefault
+                                    ? `${chipBase} border-(--accent) bg-(--accent) text-white`
+                                    : `${chipBase} border-(--line) bg-(--surface) text-foreground`
+                                }
+                              >
+                                {level.name}
+                                {isDefault ? " ★" : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </OptionCard>
+
+                      <OptionCard
+                        title="Toppings — Standard"
+                        enabled={optionForm.standardToppingsEnabled}
+                        onToggle={(enabled) =>
+                          setOptionForm((current) => ({ ...current, standardToppingsEnabled: enabled }))
+                        }
+                      >
+                        <div className="flex flex-wrap gap-1.5">
+                          {standardToppings.map((topping) => {
+                            const isSelected = optionForm.selectedToppingIds.has(topping.id);
+                            const isFree = topping.price === 0;
+                            return (
+                              <button
+                                key={topping.id}
+                                type="button"
+                                onClick={() => toggleTopping(topping.id)}
+                                className={
+                                  isSelected
+                                    ? isFree
+                                      ? `${chipBase} border-(--green) bg-(--green) text-white`
+                                      : `${chipBase} border-(--accent) bg-(--accent) text-white`
+                                    : `${chipBase} border-(--line) bg-(--surface) text-foreground`
+                                }
+                              >
+                                {toppingLabel(topping)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </OptionCard>
+
+                      <OptionCard
+                        title="Cream Top"
+                        enabled={optionForm.creamToppingsEnabled}
+                        onToggle={(enabled) =>
+                          setOptionForm((current) => ({ ...current, creamToppingsEnabled: enabled }))
+                        }
+                      >
+                        <div className="flex flex-wrap gap-1.5">
+                          {creamToppings.map((topping) => {
+                            const isSelected = optionForm.selectedToppingIds.has(topping.id);
+                            const isFree = topping.price === 0;
+                            return (
+                              <button
+                                key={topping.id}
+                                type="button"
+                                onClick={() => toggleTopping(topping.id)}
+                                className={
+                                  isSelected
+                                    ? isFree
+                                      ? `${chipBase} border-(--green) bg-(--green) text-white`
+                                      : `${chipBase} border-(--accent) bg-(--accent) text-white`
+                                    : `${chipBase} border-(--line) bg-(--surface) text-foreground`
+                                }
+                              >
+                                {toppingLabel(topping)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </OptionCard>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 border-t border-(--line) pt-[18px]">
+                    <p className="text-sm font-bold text-foreground">Sizes &amp; Prices</p>
+                    <p className="mb-3.5 mt-0.5 text-[11px] text-(--muted)">
+                      Set the exact amount customers pay for each available size.
+                    </p>
+                    <div className="rounded-[10px] border border-(--line) bg-[#fcfaf6] p-3.5">
+                      <div className="grid gap-2.5">
+                        {itemForm.variants.map((variant, index) => (
+                          <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(110px,0.6fr)_36px] gap-2">
+                            <input
+                              required
+                              value={variant.size}
+                              onChange={(event) => updateVariant(index, "size", event.target.value)}
+                              className={slideInputClass}
+                              placeholder={index === 0 ? "Regular" : "Large"}
+                              maxLength={60}
+                              aria-label={`Size ${index + 1} name`}
+                            />
+                            <div className="relative">
+                              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[13px] font-semibold text-(--muted)">
+                                $
+                              </span>
+                              <input
+                                required
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={variant.price}
+                                onChange={(event) => updateVariant(index, "price", event.target.value)}
+                                className={`${slideInputClass} pl-7`}
+                                placeholder="5.25"
+                                aria-label={`Size ${index + 1} price`}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeVariant(index)}
+                              disabled={itemForm.variants.length === 1}
+                              className="grid size-10 place-items-center rounded-lg text-(--muted) transition hover:bg-(--red-soft) hover:text-(--red) disabled:cursor-not-allowed disabled:opacity-30"
+                              aria-label={`Remove size ${index + 1}`}
+                            >
+                              <IconTrash size={16} stroke={1.8} aria-hidden />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addVariant}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-[20px] border border-dashed border-(--line) bg-(--surface) px-3 py-1.5 text-[11.5px] font-bold text-(--accent-strong) transition hover:border-(--accent)"
+                      >
+                        <IconPlus size={13} stroke={2.4} aria-hidden /> Add size
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 border-t border-(--line) pt-[18px]">
+                    <SlideField label="Calories">
+                      <input
+                        required
+                        value={itemForm.calories}
+                        onChange={(event) => setItemForm((form) => ({ ...form, calories: event.target.value }))}
+                        className={slideInputClass}
+                        placeholder="180–250 cal"
+                        maxLength={60}
+                      />
+                    </SlideField>
+                  </div>
+
+                  {error ? (
+                    <p
+                      role="alert"
+                      className="mt-4 rounded-xl border border-dashed border-[#d9b57a] bg-[#fdf3e3] px-3 py-2.5 text-xs leading-5 text-(--accent-strong)"
+                    >
+                      {error}
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+
+            <footer className="flex gap-2.5 border-t border-(--line) px-6 py-3.5">
+              <button
+                type="submit"
+                disabled={isSaving || categories.length === 0}
+                className="h-10 flex-1 rounded-[9px] border border-(--accent) bg-(--accent) px-4 text-[12.5px] font-semibold text-white transition hover:bg-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSaving ? "Saving..." : editingItemId ? "Save Changes" : "Create item"}
+              </button>
+              <button
+                type="button"
+                onClick={clearFormFields}
+                className="h-10 rounded-[9px] border border-(--line) bg-white px-4 text-[12.5px] font-semibold text-foreground transition hover:border-(--accent)"
+              >
+                Clear
+              </button>
+            </footer>
+          </form>
+        </>
+      ) : null}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="grid gap-2"><span className="text-sm font-medium text-foreground">{label}</span>{children}</label>;
+function SlideField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <span className="mb-[7px] block text-[12.5px] font-semibold text-foreground">{label}</span>
+      {children}
+    </div>
+  );
 }
 
-function SizePriceEditor({
-  variants,
-  onAdd,
-  onRemove,
-  onChange,
+function Switch({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative h-[21px] w-9 shrink-0 rounded-full transition ${checked ? "bg-(--accent)" : "bg-(--line)"}`}
+    >
+      <span
+        className={`absolute top-[3px] size-[15px] rounded-full bg-white transition ${checked ? "left-[18px]" : "left-[3px]"}`}
+      />
+    </button>
+  );
+}
+
+function OptionCard({
+  title,
+  enabled,
+  onToggle,
+  children,
 }: {
-  variants: ItemForm["variants"];
-  onAdd: () => void;
-  onRemove: (index: number) => void;
-  onChange: (index: number, field: "size" | "price", value: string) => void;
+  title: string;
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  children: React.ReactNode;
 }) {
   return (
-    <fieldset className="rounded-2xl border border-(--line) bg-(--surface-tint) p-4">
-      <legend className="sr-only">Sizes and prices</legend>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-foreground">Sizes and prices</p>
-          <p className="mt-1 text-xs leading-5 text-(--muted)">
-            Set the exact amount customers pay for each available size.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-(--line) bg-white px-3 text-xs font-semibold text-(--accent-strong) outline-none transition hover:border-(--accent) focus-visible:ring-2 focus-visible:ring-(--accent)"
-        >
-          <IconPlus size={15} stroke={2} aria-hidden={true} />
-          Add size
-        </button>
+    <div className="rounded-[10px] border border-(--line) bg-[#fcfaf6] p-3.5">
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <span className="text-[12.5px] font-semibold text-foreground">{title}</span>
+        <Switch checked={enabled} onChange={onToggle} />
       </div>
-      <div className="mt-4 grid gap-3">
-        {variants.map((variant, index) => (
-          <div
-            key={index}
-            className="grid grid-cols-[minmax(0,1fr)_minmax(120px,0.7fr)_40px] gap-2"
-          >
-            <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-(--muted)">Size {index + 1}</span>
-              <input
-                required
-                value={variant.size}
-                onChange={(event) => onChange(index, "size", event.target.value)}
-                className={fieldClass}
-                placeholder={index === 0 ? "Regular" : "Large"}
-                maxLength={60}
-              />
-            </label>
-            <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-(--muted)">Price</span>
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-sm font-semibold text-(--muted)">
-                  $
-                </span>
-                <input
-                  required
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={variant.price}
-                  onChange={(event) => onChange(index, "price", event.target.value)}
-                  className={`${fieldClass} pl-7`}
-                  placeholder={index === 0 ? "25.00" : "30.00"}
-                />
-              </div>
-            </label>
-            <button
-              type="button"
-              onClick={() => onRemove(index)}
-              disabled={variants.length === 1}
-              className="mt-[26px] grid size-10 place-items-center rounded-xl text-(--muted) outline-none transition hover:bg-[#fff1ee] hover:text-[#a33b2e] focus-visible:ring-2 focus-visible:ring-(--accent) disabled:cursor-not-allowed disabled:opacity-30"
-              aria-label={`Remove ${variant.size || `size ${index + 1}`}`}
-            >
-              <IconTrash size={17} stroke={1.8} aria-hidden={true} />
-            </button>
-          </div>
-        ))}
-      </div>
-    </fieldset>
+      <div className={enabled ? "" : "pointer-events-none opacity-35"}>{children}</div>
+    </div>
   );
-}
-
-function DropdownSelect({ value, onValueChange, options, ariaLabel }: { value: string; onValueChange: (value: string) => void; options: { value: string; label: string }[]; ariaLabel: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const selectedOption = options.find((option) => option.value === value) ?? options[0];
-
-  useEffect(() => {
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("pointerdown", closeOnOutsideClick);
-    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
-  }, []);
-
-  return <div ref={containerRef} className="relative"><button type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={isOpen} onClick={() => setIsOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "Escape") setIsOpen(false); if (event.key === "ArrowDown") { event.preventDefault(); setIsOpen(true); } }} className="flex h-11 w-full items-center gap-3 rounded-xl border border-(--line) bg-(--surface-raised) px-3.5 text-left text-sm font-medium text-foreground shadow-[0_1px_0_rgba(21,58,67,0.02)] outline-none transition hover:border-[#b4ccca]  focus:ring-2 focus:ring-[#a86100]/20"><span className="min-w-0 flex-1 truncate">{selectedOption?.label}</span><span className={`grid size-8 shrink-0 place-items-center rounded-lg bg-(--surface-tint) text-(--accent) transition ${isOpen ? "rotate-180" : ""}`}><IconChevronDown size={17} stroke={2} aria-hidden={true} /></span></button>{isOpen ? <div role="listbox" aria-label={ariaLabel} className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-(--line) bg-white p-1.5 shadow-[0_16px_34px_rgba(21,58,67,0.16)]">{options.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === value} onClick={() => { onValueChange(option.value); setIsOpen(false); }} className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${option.value === value ? "bg-(--accent-soft) text-(--accent-strong)" : "text-foreground hover:bg-(--surface-tint)"}`}><span className="truncate">{option.label}</span>{option.value === value ? <IconCheck size={16} stroke={2.2} aria-hidden={true} /> : null}</button>)}</div> : null}</div>;
-}
-
-function ImageUploadField({ file, hasCurrentImage, required, onChange }: { file: File | null; hasCurrentImage: boolean; required: boolean; onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
-  return <div className="grid min-w-0 gap-2"><span className="text-sm font-medium text-foreground">Menu image</span><label className="flex h-11 min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-(--line) bg-(--surface-tint) px-3.5 text-sm text-(--muted) transition hover:border-(--accent) hover:bg-(--accent-soft)"><IconPhotoUp size={18} stroke={1.8} className="shrink-0 text-(--accent)" aria-hidden={true} /><span className="min-w-0 flex-1 truncate font-medium text-foreground">{file ? file.name : hasCurrentImage ? "Current image saved Ã¢â‚¬â€ choose a new file to replace it" : "Choose a product image"}</span><span className="shrink-0 text-xs font-semibold text-(--accent)">Browse</span><input required={required} type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={onChange} className="sr-only" /></label><p className="text-xs leading-5 text-(--muted)">JPG, PNG, WebP, or AVIF. Maximum file size 5 MB.</p></div>;
-}
-
-function imagePathFromPublicUrl(imageUrl: string) {
-  const marker = "/storage/v1/object/public/menu-images/";
-  const markerIndex = imageUrl.indexOf(marker);
-  return markerIndex === -1 ? null : decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
-}
-
-function sortedVariants(item: MenuItem) {
-  const variants = [...(item.menu_item_variants ?? [])].sort(
-    (left, right) => left.sort_order - right.sort_order,
-  );
-  if (variants.length > 0) return variants;
-
-  return item.sizes
-    .split(",")
-    .map((size) => size.trim())
-    .filter(Boolean)
-    .map((size, index) => ({
-      id: `legacy-${index}-${size}`,
-      size,
-      price: item.price,
-      sort_order: index,
-    }));
-}
-
-function menuCategoryName(category: MenuItem["menu_categories"]) {
-  if (Array.isArray(category)) return category[0]?.name ?? "Uncategorized";
-  return category?.name ?? "Uncategorized";
-}
-
-function FormHeading({ icon, title, copy }: { icon: React.ReactNode; title: string; copy: string }) {
-  return <div className="flex items-start gap-3"><span className="grid size-9 place-items-center rounded-xl bg-(--accent-soft) text-(--accent)">{icon}</span><div><p className="text-base font-semibold text-foreground">{title}</p><p className="mt-1 text-sm leading-6 text-(--muted)">{copy}</p></div></div>;
-}
-
-function FormActions({ saving, editing, saveLabel, createLabel, onCancel }: { saving: boolean; editing: boolean; saveLabel: string; createLabel: string; onCancel: () => void }) {
-  return <div className="mt-6 flex flex-wrap gap-3"><button type="submit" disabled={saving} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-(--accent) px-5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(168,97,0,0.16)] transition hover:bg-(--accent-strong) active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"><IconPlus size={17} stroke={2} aria-hidden={true} />{saving ? "Saving..." : editing ? saveLabel : createLabel}</button>{editing ? <button type="button" onClick={onCancel} className="inline-flex h-11 items-center justify-center rounded-xl border border-(--line) px-4 text-sm font-semibold text-(--muted) transition hover:border-(--accent) hover:text-(--accent-strong)">Cancel</button> : null}</div>;
-}
-
-function Status({ active, activeLabel, inactiveLabel }: { active: boolean; activeLabel: string; inactiveLabel: string }) {
-  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] ${active ? "bg-[#eaf7ef] text-[#26734b]" : "bg-[#f2f4f4] text-[#728084]"}`}>{active ? <IconCheck size={12} stroke={2.4} aria-hidden={true} /> : null}{active ? activeLabel : inactiveLabel}</span>;
-}
-
-function RowActions({ onEdit, onDelete, label }: { onEdit: () => void; onDelete: () => void; label: string }) {
-  return <div className="flex shrink-0 items-center gap-1"><button type="button" onClick={onEdit} className="grid size-9 place-items-center rounded-xl text-(--muted) outline-none transition hover:bg-(--surface-tint) hover:text-foreground focus-visible:ring-2 focus-visible:ring-(--accent)" aria-label={`Edit ${label}`}><IconPencil size={17} stroke={1.8} aria-hidden={true} /></button><button type="button" onClick={onDelete} className="grid size-9 place-items-center rounded-xl text-(--muted) outline-none transition hover:bg-[#fff1ee] hover:text-[#a33b2e] focus-visible:ring-2 focus-visible:ring-(--accent)" aria-label={`Delete ${label}`}><IconTrash size={17} stroke={1.8} aria-hidden={true} /></button></div>;
-}
-
-function EmptyState({ title, copy }: { title: string; copy: string }) {
-  return <div className="px-6 py-14 text-center"><p className="text-base font-semibold text-foreground">{title}</p><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-(--muted)">{copy}</p></div>;
 }

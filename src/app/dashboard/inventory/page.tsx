@@ -24,21 +24,18 @@ export default async function InventoryPage() {
   ]);
 
   return (
-    <main className="min-h-dvh bg-(--surface) xl:grid xl:h-dvh xl:grid-cols-[236px_minmax(0,1fr)] xl:overflow-hidden">
+    <main className="min-h-dvh bg-(--surface) xl:grid xl:h-dvh xl:grid-cols-[230px_minmax(0,1fr)] xl:overflow-hidden">
       <DashboardSidebar
         email={identity.email}
         name={identity.name}
         activeItem="inventory"
       />
-      <section className="min-w-0 px-4 py-4 sm:px-6 lg:px-8 lg:py-5 xl:overflow-hidden">
+      <section className="min-w-0 px-4 py-5 sm:px-7 xl:overflow-hidden">
         <div className="mx-auto flex h-full min-h-0 max-w-[1240px] flex-col">
-          <header className="shrink-0 border-b border-(--line) pb-3">
+          <header className="shrink-0">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-(--accent)">Stockroom control</p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                Inventory ledger
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm leading-5 text-(--muted)">
+              <h1 className="font-serif text-xl font-bold text-foreground">Inventory</h1>
+              <p className="mt-0.5 text-xs text-(--muted)">
                 Receive supplies, record daily usage, and catch low stock before service begins.
               </p>
             </div>

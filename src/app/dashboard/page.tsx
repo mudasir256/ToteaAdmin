@@ -1,26 +1,16 @@
 import Link from "next/link";
 import {
-  IconArrowRight,
-  IconCurrencyDollar,
-  IconPackages,
+  IconAlertTriangle,
+  IconBan,
+  IconCircleCheck,
+  IconCup,
   IconReceipt2,
-  IconUsers,
+  IconSparkles,
+  IconTags,
 } from "@tabler/icons-react";
 
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
-import { Metric } from "@/components/dashboard/metric";
 import { getDashboardContext, getDashboardOverview } from "@/lib/dashboard/data";
-import type { OrderStatus } from "@/lib/dashboard/types";
-
-const statusClasses: Record<OrderStatus, string> = {
-  pending: "bg-(--accent-soft) text-(--accent-strong)",
-  confirmed: "bg-[#edf4ff] text-[#315e92]",
-  processing: "bg-[#f0efff] text-[#5d50a8]",
-  ready: "bg-[#e8f5ef] text-[#247158]",
-  completed: "bg-(--surface-tint) text-foreground",
-  cancelled: "bg-[#fff0ed] text-[#a33b2e]",
-  refunded: "bg-[#f4f1ed] text-[#6f6257]",
-};
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -30,14 +20,19 @@ function money(value: number) {
   }).format(value);
 }
 
-function orderTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }
+
+const quickLinks = [
+  { href: "/dashboard/menu", label: "Add menu item", icon: IconCup },
+  { href: "/dashboard/toppings", label: "Add topping", icon: IconSparkles },
+  { href: "/dashboard/categories", label: "Add category", icon: IconTags },
+  { href: "/dashboard/orders", label: "View orders", icon: IconReceipt2 },
+];
 
 export default async function DashboardPage() {
   const [{ identity }, overview] = await Promise.all([
@@ -45,86 +40,149 @@ export default async function DashboardPage() {
     getDashboardOverview(),
   ]);
 
+  const alerts: Array<{ icon: "soldout" | "low"; content: React.ReactNode }> = [
+    ...overview.soldOutItems.slice(0, 4).map((name) => ({
+      icon: "soldout" as const,
+      content: (
+        <>
+          <b>{name}</b> is Sold Out —{" "}
+          <Link href="/dashboard/menu" className="font-semibold text-(--accent-strong) hover:underline">
+            review in Menu →
+          </Link>
+        </>
+      ),
+    })),
+    ...overview.lowStockItems.slice(0, 4).map((item) => ({
+      icon: "low" as const,
+      content: (
+        <>
+          <b>{item.name}</b> running low ({item.quantity} {item.unit} left) —{" "}
+          <Link href="/dashboard/inventory" className="font-semibold text-(--accent-strong) hover:underline">
+            view Inventory →
+          </Link>
+        </>
+      ),
+    })),
+  ];
+
   return (
-    <main className="min-h-dvh bg-(--surface) xl:grid xl:grid-cols-[236px_minmax(0,1fr)]">
+    <main className="min-h-dvh bg-(--surface) xl:grid xl:grid-cols-[230px_minmax(0,1fr)]">
       <DashboardSidebar email={identity.email} name={identity.name} />
-      <section className="min-w-0 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+      <section className="min-w-0 px-4 py-6 sm:px-7">
         <div className="mx-auto max-w-[1240px]">
-          <header className="flex flex-wrap items-end justify-between gap-4 border-b border-(--line) pb-5">
+          <header className="mb-[18px] flex flex-wrap items-center justify-between gap-2.5">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-(--accent)">ToTea operations</p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-                Welcome back, {identity.name.split(" ")[0]}.
+              <h1 className="font-serif text-xl font-bold text-foreground">
+                {greeting()}, {identity.name.split(" ")[0]}
               </h1>
-              <p className="mt-1 text-sm leading-6 text-(--muted)">
-                Live customers, orders, menu, and stock in one place.
-              </p>
+              <p className="mt-0.5 text-xs text-(--muted)">Here&apos;s what&apos;s happening today.</p>
             </div>
-            <Link href="/dashboard/orders" className="inline-flex h-10 items-center gap-2 rounded-xl bg-(--accent) px-4 text-sm font-semibold text-white transition hover:bg-(--accent-strong) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2">
-              View orders <IconArrowRight size={16} stroke={1.9} aria-hidden />
-            </Link>
           </header>
 
           {overview.error ? (
-            <p role="alert" className="mt-4 rounded-xl border border-[#c98b26]/35 bg-(--accent-soft) px-4 py-3 text-sm text-[#7a4d00]">{overview.error}</p>
+            <p role="alert" className="mb-4 rounded-xl border border-dashed border-[#d9b57a] bg-[#fdf3e3] px-3 py-2.5 text-xs text-(--accent-strong)">
+              {overview.error}
+            </p>
           ) : null}
 
-          <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Business overview">
-            <Metric icon={IconReceipt2} label="Orders" value={String(overview.orders.length)} detail="All website orders" />
-            <Metric icon={IconReceipt2} label="Open orders" value={String(overview.openOrderCount)} detail="Pending through ready" />
-            <Metric icon={IconUsers} label="Customers" value={String(overview.customerCount)} detail="Registered customer profiles" />
-            <Metric icon={IconCurrencyDollar} label="Recorded sales" value={money(overview.paidTotal)} detail="Paid orders in the database" />
+          <section className="mb-5 grid grid-cols-2 gap-4 xl:grid-cols-4" aria-label="Business overview">
+            <StatCard value={String(overview.ordersTodayCount)} label="Orders today" />
+            <StatCard value={money(overview.revenueToday)} label="Revenue today" />
+            <StatCard value={String(overview.soldOutItems.length)} label="Items sold out" />
+            <StatCard value={String(overview.stockAttention)} label="Low-stock alerts" />
           </section>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <section className="overflow-hidden rounded-2xl border border-(--line) bg-white">
-              <header className="flex items-center justify-between gap-4 border-b border-(--line) px-5 py-4">
-                <div>
-                  <h2 className="font-semibold text-foreground">Recent order tickets</h2>
-                  <p className="mt-1 text-xs text-(--muted)">The newest website orders, updated from Square.</p>
-                </div>
-                <Link href="/dashboard/orders" className="text-xs font-semibold text-(--accent) hover:text-(--accent-strong)">See all</Link>
-              </header>
-              {overview.recentOrders.length === 0 ? (
-                <div className="px-5 py-14 text-center">
-                  <p className="font-semibold text-foreground">No orders yet</p>
-                  <p className="mt-1 text-sm text-(--muted)">Completed website checkouts will appear here.</p>
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <section className="rounded-[14px] border border-(--line) bg-white py-[22px]">
+              <p className="mb-3 px-6 text-sm font-bold text-foreground">Needs your attention</p>
+              {alerts.length === 0 ? (
+                <div className="flex items-center gap-2.5 px-6 py-2.5 text-[12.5px] text-(--muted)">
+                  <IconCircleCheck size={16} stroke={1.9} className="text-(--green)" aria-hidden />
+                  All clear — nothing is sold out and stock levels look healthy.
                 </div>
               ) : (
-                <div className="divide-y divide-(--line)">
-                  {overview.recentOrders.map((order) => (
-                    <Link key={order.id} href="/dashboard/orders" className="grid gap-3 border-l-[3px] border-l-(--accent) px-4 py-3.5 transition hover:bg-(--surface) sm:grid-cols-[1fr_1fr_auto_auto] sm:items-center sm:gap-4 sm:px-5">
-                      <span className="min-w-0">
-                        <span className="block font-mono text-xs font-semibold text-(--accent)">{order.orderNumber}</span>
-                        <span className="mt-1 block truncate text-sm font-semibold text-foreground">{order.items[0]?.name ?? "Order"}</span>
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm text-foreground">{order.customerName}</span>
-                        <span className="mt-1 block text-xs text-(--muted)">{orderTime(order.createdAt)}</span>
-                      </span>
-                      <span className={`w-fit rounded-lg px-2.5 py-1 text-xs font-semibold capitalize ${statusClasses[order.orderStatus]}`}>{order.orderStatus}</span>
-                      <span className="font-mono text-sm font-semibold text-foreground">{money(order.total)}</span>
-                    </Link>
+                <div>
+                  {alerts.map((alert, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-2.5 border-b border-(--line) px-6 py-2.5 text-[12.5px] leading-5 text-foreground last:border-b-0"
+                    >
+                      {alert.icon === "soldout" ? (
+                        <IconBan size={15} stroke={1.9} className="shrink-0 text-(--red)" aria-hidden />
+                      ) : (
+                        <IconAlertTriangle size={15} stroke={1.9} className="shrink-0 text-(--accent)" aria-hidden />
+                      )}
+                      <span className="min-w-0">{alert.content}</span>
+                    </div>
                   ))}
                 </div>
               )}
             </section>
 
-            <aside className="h-fit rounded-2xl border border-(--line) bg-(--surface-tint) p-5">
-              <span className="grid size-10 place-items-center rounded-xl bg-white text-(--accent)">
-                <IconPackages size={19} stroke={1.8} aria-hidden />
-              </span>
-              <p className="mt-5 font-mono text-3xl font-semibold tracking-tight text-foreground">{overview.stockAttention}</p>
-              <h2 className="mt-1 font-semibold text-foreground">Stock items need attention</h2>
-              <p className="mt-2 text-sm leading-6 text-(--muted)">Items at or below their minimum quantity.</p>
-              <Link href="/dashboard/inventory" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-(--accent) hover:text-(--accent-strong)">
-                Open inventory <IconArrowRight size={16} stroke={1.9} aria-hidden />
-              </Link>
-            </aside>
+            <section className="rounded-[14px] border border-(--line) bg-white p-[22px]">
+              <p className="mb-3 text-sm font-bold text-foreground">Quick actions</p>
+              <div className="grid grid-cols-2 gap-3.5">
+                {quickLinks.map(({ href, label, icon: Icon }) => (
+                  <Link
+                    key={label}
+                    href={href}
+                    className="rounded-xl border border-(--line) bg-white p-4 text-center outline-none transition hover:border-(--accent) hover:bg-(--accent-soft)/40 focus-visible:ring-2 focus-visible:ring-(--accent)"
+                  >
+                    <Icon size={20} stroke={1.8} className="mx-auto mb-1.5 text-(--accent)" aria-hidden />
+                    <span className="block text-[12.5px] font-semibold text-foreground">{label}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
           </div>
+
+          <section className="mt-4 overflow-hidden rounded-[14px] border border-(--line) bg-white">
+            <header className="flex items-center justify-between gap-4 border-b border-(--line) px-6 py-4">
+              <div>
+                <p className="text-sm font-bold text-foreground">Recent orders</p>
+                <p className="mt-0.5 text-xs text-(--muted)">The newest website orders.</p>
+              </div>
+              <Link href="/dashboard/orders" className="text-xs font-semibold text-(--accent-strong) hover:underline">
+                See all →
+              </Link>
+            </header>
+            {overview.recentOrders.length === 0 ? (
+              <p className="px-6 py-10 text-center text-[12.5px] text-(--muted)">
+                No orders yet — completed website checkouts will appear here.
+              </p>
+            ) : (
+              <div>
+                {overview.recentOrders.map((order) => (
+                  <Link
+                    key={order.id}
+                    href="/dashboard/orders"
+                    className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-(--line) px-6 py-3 text-[12.5px] transition last:border-b-0 hover:bg-(--surface-tint)"
+                  >
+                    <span className="font-mono text-xs font-semibold text-(--accent-strong)">{order.orderNumber}</span>
+                    <span className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                      {order.items[0]?.name ?? "Order"}
+                    </span>
+                    <span className="truncate text-(--muted)">{order.customerName}</span>
+                    <span className="rounded-full bg-(--surface-tint) px-2.5 py-1 text-[11px] font-bold capitalize text-(--muted)">
+                      {order.orderStatus}
+                    </span>
+                    <span className="font-mono font-semibold text-foreground">{money(order.total)}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </section>
     </main>
   );
 }
 
+function StatCard({ value, label }: { value: string; label: string }) {
+  return (
+    <article className="rounded-[14px] border border-(--line) bg-white px-5 py-[18px]">
+      <p className="font-serif text-[26px] font-semibold leading-tight text-foreground">{value}</p>
+      <p className="mt-0.5 text-[11.5px] text-(--muted)">{label}</p>
+    </article>
+  );
+}

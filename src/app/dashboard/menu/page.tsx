@@ -19,7 +19,7 @@ export default async function MenuPage() {
       .order("sort_order", { ascending: true }),
     supabase
       .from("menu_items")
-      .select("id, category_id, name, slug, description, image_url, price, sizes, ingredients, calories, allergens, is_available, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)")
+      .select("id, category_id, name, description, image_url, price, sizes, ingredients, calories, allergens, is_available, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)")
       .order("sort_order", { ascending: true }),
     supabase
       .from("menu_toppings")

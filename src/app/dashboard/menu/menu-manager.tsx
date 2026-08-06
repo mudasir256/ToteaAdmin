@@ -41,7 +41,6 @@ export type MenuItem = {
   id: string;
   category_id: string;
   name: string;
-  slug: string;
   description: string;
   image_url: string;
   price: number;
@@ -79,7 +78,6 @@ type Availability = "available" | "sold_out" | "draft";
 type ItemForm = {
   categoryId: string;
   name: string;
-  slug: string;
   description: string;
   imageUrl: string;
   variants: { size: string; price: string }[];
@@ -160,7 +158,6 @@ function blankItem(categoryId = ""): ItemForm {
   return {
     categoryId,
     name: "",
-    slug: "",
     description: "",
     imageUrl: "",
     variants: [
@@ -348,7 +345,7 @@ export function MenuManager({
       supabase
         .from("menu_items")
         .select(
-          "id, category_id, name, slug, description, image_url, price, sizes, ingredients, calories, allergens, is_available, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)",
+          "id, category_id, name, description, image_url, price, sizes, ingredients, calories, allergens, is_available, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)",
         )
         .order("sort_order", { ascending: true }),
     ]);
@@ -405,12 +402,6 @@ export function MenuManager({
           ? new Set(toppingIds)
           : defaultSelectedToppingIds(initialToppings),
     };
-  }
-
-  async function resolveMenuItemId(slug: string) {
-    const supabase = createClient();
-    const { data } = await supabase.from("menu_items").select("id").eq("slug", slug).maybeSingle();
-    return data?.id ?? null;
   }
 
   async function persistItemOptions(menuItemId: string, options: OptionFormState) {
@@ -530,7 +521,6 @@ export function MenuManager({
     setItemForm({
       categoryId: item.category_id,
       name: item.name,
-      slug: item.slug,
       description: item.description,
       imageUrl: item.image_url,
       variants: sortedVariants(item).map((variant) => ({
@@ -672,11 +662,9 @@ export function MenuManager({
       uploadedImage = { path, publicUrl: data.publicUrl };
     }
 
-    const slug = itemForm.slug.trim().toLowerCase();
     const payload = {
       category_id: itemForm.categoryId,
       name: itemForm.name.trim(),
-      slug,
       description: itemForm.description.trim(),
       image_url: uploadedImage?.publicUrl ?? itemForm.imageUrl.trim(),
       ingredients: itemForm.ingredients.trim(),
@@ -685,11 +673,14 @@ export function MenuManager({
       is_available: itemForm.availability === "available",
       sort_order: Number(itemForm.sortOrder),
     };
-    const { error: saveError } = await supabase.rpc("save_menu_item_with_variants", {
-      p_menu_item_id: editingItemId,
-      p_item: payload,
-      p_variants: variants,
-    });
+    const { data: savedMenuItemId, error: saveError } = await supabase.rpc(
+      "save_menu_item_with_variants",
+      {
+        p_menu_item_id: editingItemId,
+        p_item: payload,
+        p_variants: variants,
+      },
+    );
 
     if (saveError) {
       if (uploadedImage) {
@@ -705,7 +696,7 @@ export function MenuManager({
       await supabase.storage.from("menu-images").remove([previousImagePath]);
     }
 
-    const menuItemId = editingItemId ?? (await resolveMenuItemId(slug));
+    const menuItemId = editingItemId ?? (typeof savedMenuItemId === "string" ? savedMenuItemId : null);
     if (menuItemId) {
       const optionsWarningMessage = await persistItemOptions(menuItemId, optionForm);
       if (optionsWarningMessage) {
@@ -1064,18 +1055,6 @@ export function MenuManager({
                       />
                     </SlideField>
                   </div>
-
-                  <SlideField label="Slug">
-                    <input
-                      required
-                      value={itemForm.slug}
-                      onChange={(event) => setItemForm((form) => ({ ...form, slug: event.target.value }))}
-                      className={slideInputClass}
-                      placeholder="sea-salt-coffee"
-                      pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                      maxLength={100}
-                    />
-                  </SlideField>
 
                   <SlideField label="Description">
                     <textarea

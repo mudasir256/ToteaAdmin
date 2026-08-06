@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import { BrandLockup } from "@/components/auth/brand-lockup";
 
 const drinks = {
-  mango: "https://to-tea.vercel.app/assets/MangoSagoCoconutMilk-Bq8wQafP.webp",
-  matcha: "https://to-tea.vercel.app/assets/MatchaLatte-u18XXNNY.jpg",
-  coffee: "https://to-tea.vercel.app/assets/VietnameseSeaSaltCoffee-CPCTHlCa.png",
+  mango: "/auth/mango-sago-coconut-milk.webp",
+  matcha: "/auth/matcha-latte.webp",
+  coffee: "/auth/vietnamese-sea-salt-coffee.webp",
 };
 
 export function AuthShell({ children }: { children: ReactNode }) {

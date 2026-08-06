@@ -419,8 +419,8 @@ export function MenuManager({
     const { error: settingsError } = await supabase.from("menu_item_option_settings").upsert(
       {
         menu_item_id: menuItemId,
-        sugar_enabled: options.sugarEnabled,
-        ice_enabled: options.iceEnabled,
+        sugar_enabled: true,
+        ice_enabled: true,
         standard_toppings_enabled: options.standardToppingsEnabled,
         cream_toppings_enabled: options.creamToppingsEnabled,
         default_sugar_level_id: isPersistedLevelId(options.defaultSugarLevelId)
@@ -1114,7 +1114,7 @@ export function MenuManager({
                   <div className="mt-5 border-t border-(--line) pt-[18px]">
                     <p className="text-sm font-bold text-foreground">Options &amp; Toppings</p>
                     <p className="mb-3.5 mt-0.5 text-[11px] text-(--muted)">
-                      Lists are managed once (Toppings / Sugar &amp; Ice Levels tabs), referenced here.
+                      Sugar and ice are compulsory on every drink (not inventory). Toppings lists are managed in their own tabs.
                     </p>
 
                     {isLoadingOptions ? (
@@ -1122,11 +1122,7 @@ export function MenuManager({
                     ) : null}
 
                     <div className="grid gap-3">
-                      <OptionCard
-                        title="Sugar Level"
-                        enabled={optionForm.sugarEnabled}
-                        onToggle={(enabled) => setOptionForm((current) => ({ ...current, sugarEnabled: enabled }))}
-                      >
+                      <OptionCard title="Sugar Level" compulsory>
                         <div className="flex flex-wrap gap-1.5">
                           {sugarLevels.map((level) => {
                             const isDefault = optionForm.defaultSugarLevelId === level.id;
@@ -1137,6 +1133,7 @@ export function MenuManager({
                                 onClick={() =>
                                   setOptionForm((current) => ({
                                     ...current,
+                                    sugarEnabled: true,
                                     defaultSugarLevelId: level.id,
                                   }))
                                 }
@@ -1154,11 +1151,7 @@ export function MenuManager({
                         </div>
                       </OptionCard>
 
-                      <OptionCard
-                        title="Ice Level"
-                        enabled={optionForm.iceEnabled}
-                        onToggle={(enabled) => setOptionForm((current) => ({ ...current, iceEnabled: enabled }))}
-                      >
+                      <OptionCard title="Ice Level" compulsory>
                         <div className="flex flex-wrap gap-1.5">
                           {iceLevels.map((level) => {
                             const isDefault = optionForm.defaultIceLevelId === level.id;
@@ -1169,6 +1162,7 @@ export function MenuManager({
                                 onClick={() =>
                                   setOptionForm((current) => ({
                                     ...current,
+                                    iceEnabled: true,
                                     defaultIceLevelId: level.id,
                                   }))
                                 }
@@ -1381,22 +1375,30 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: (checked: b
 
 function OptionCard({
   title,
-  enabled,
+  enabled = true,
   onToggle,
+  compulsory = false,
   children,
 }: {
   title: string;
-  enabled: boolean;
-  onToggle: (enabled: boolean) => void;
+  enabled?: boolean;
+  onToggle?: (enabled: boolean) => void;
+  compulsory?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="rounded-[10px] border border-(--line) bg-[#fcfaf6] p-3.5">
       <div className="mb-2.5 flex items-center justify-between gap-3">
         <span className="text-[12.5px] font-semibold text-foreground">{title}</span>
-        <Switch checked={enabled} onChange={onToggle} />
+        {compulsory ? (
+          <span className="rounded-full border border-(--line) bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-(--muted)">
+            Compulsory
+          </span>
+        ) : (
+          <Switch checked={Boolean(enabled)} onChange={(value) => onToggle?.(value)} />
+        )}
       </div>
-      <div className={enabled ? "" : "pointer-events-none opacity-35"}>{children}</div>
+      <div className={compulsory || enabled ? "" : "pointer-events-none opacity-35"}>{children}</div>
     </div>
   );
 }

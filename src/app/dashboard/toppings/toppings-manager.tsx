@@ -436,11 +436,27 @@ export function ToppingsManager({ initialToppings, initialError }: ToppingsManag
 
         <section className="overflow-hidden rounded-[14px] border border-(--line) bg-white pb-2">
           <div className="flex items-start justify-between gap-4 px-[22px] pt-5">
-            <div>
-              <p className="text-base font-bold text-foreground">Topping bar</p>
-              <p className="mt-0.5 text-[11.5px] text-(--muted)">
-                Image, price, order, and visibility stay synchronized with the website.
-              </p>
+            <div className="flex min-w-0 items-start gap-2.5">
+              <label className="flex shrink-0 cursor-pointer items-center pt-1">
+                <input
+                  type="checkbox"
+                  checked={toppings.length > 0 && selectedCount === toppings.length}
+                  onChange={() => {
+                    setSelectedIds((current) => {
+                      if (current.size === toppings.length) return new Set();
+                      return new Set(toppings.map((topping) => topping.id));
+                    });
+                  }}
+                  aria-label="Select all toppings"
+                  className="size-4 shrink-0 accent-(--accent)"
+                />
+              </label>
+              <div className="min-w-0">
+                <p className="text-base font-bold text-foreground">Topping bar</p>
+                <p className="mt-0.5 text-[11.5px] text-(--muted)">
+                  Image, price, order, and visibility stay synchronized with the website.
+                </p>
+              </div>
             </div>
             <span className="whitespace-nowrap rounded-[14px] border border-(--line) bg-(--surface) px-3 py-[5px] text-[11.5px] font-bold text-foreground">
               {toppings.length} total
@@ -564,14 +580,19 @@ function ToppingGroup({
       </p>
       <div className="grid gap-x-5 px-[22px] pb-2 sm:grid-cols-2">
         {toppings.map((topping) => (
-          <article key={topping.id} className="flex gap-2.5 border-t border-(--line) py-3.5">
-            <input
-              type="checkbox"
-              checked={selectedIds.has(topping.id)}
-              onChange={() => onToggleSelected(topping.id)}
-              aria-label={`Select ${topping.name}`}
-              className="mt-1 accent-(--accent)"
-            />
+          <article
+            key={topping.id}
+            className="flex items-start gap-2.5 border-t border-(--line) py-3.5"
+          >
+            <label className="flex shrink-0 cursor-pointer items-start pt-0.5">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(topping.id)}
+                onChange={() => onToggleSelected(topping.id)}
+                aria-label={`Select ${topping.name}`}
+                className="size-4 shrink-0 accent-(--accent)"
+              />
+            </label>
             <Image
               src={topping.image_url}
               alt=""

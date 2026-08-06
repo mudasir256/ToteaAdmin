@@ -35,6 +35,8 @@ export type OrderItemDTO = {
   name: string;
   imageUrl: string;
   size: string;
+  sweetness: string | null;
+  ice: string | null;
   toppings: Array<{
     id: string;
     name: string;

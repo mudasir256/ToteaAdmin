@@ -18,6 +18,8 @@ with ingredient_source as (
     ','
   ) as ingredient_name
   where trim(ingredient_name) <> ''
+    -- Ice & Sugar are compulsory drink options, never inventory stock.
+    and lower(trim(ingredient_name)) not in ('ice', 'sugar')
 ),
 classified_ingredients as (
   select
@@ -122,6 +124,7 @@ menu_ingredients as (
     ','
   ) as ingredient_name
   where trim(ingredient_name) <> ''
+    and lower(trim(ingredient_name)) not in ('ice', 'sugar')
 ),
 recipe_quantities as (
   select
@@ -131,7 +134,6 @@ recipe_quantities as (
     round(
       (
         case
-          when lower(menu_ingredient.ingredient_name) = 'ice' then 8
           when lower(menu_ingredient.ingredient_name) like '%tea leaves%' then 0.5
           when lower(menu_ingredient.ingredient_name) like '%matcha powder%' then 0.2
           when lower(menu_ingredient.ingredient_name) like '%tea%' then 6
@@ -148,7 +150,6 @@ recipe_quantities as (
           when lower(menu_ingredient.ingredient_name) like '%syrup%' then 1
           when lower(menu_ingredient.ingredient_name) like '%extract%' then 0.5
           when lower(menu_ingredient.ingredient_name) = 'sago pearls' then 2
-          when lower(menu_ingredient.ingredient_name) = 'sugar' then 0.5
           when lower(menu_ingredient.ingredient_name) like '%cinnamon%'
             or lower(menu_ingredient.ingredient_name) = 'spices'
             then 0.1

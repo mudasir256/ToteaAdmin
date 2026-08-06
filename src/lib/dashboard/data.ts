@@ -87,6 +87,8 @@ function orderItemsDTO(value: unknown): OrderItemDTO[] {
       name: text(item.name) || "Menu item",
       imageUrl: text(item.image_url),
       size: text(item.size),
+      sweetness: text(item.sweetness) || null,
+      ice: text(item.ice) || null,
       toppings,
       quantity: number(item.quantity),
       unitPrice: number(item.unit_price),

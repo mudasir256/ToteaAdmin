@@ -443,7 +443,14 @@ export function MenuManager({
       return deleteError.message;
     }
 
-    const selectedIdsList = [...options.selectedToppingIds];
+    const toppingById = new Map(initialToppings.map((topping) => [topping.id, topping]));
+    const selectedIdsList = [...options.selectedToppingIds].filter((toppingId) => {
+      const topping = toppingById.get(toppingId);
+      if (!topping) return false;
+      if (topping.category === "standard") return options.standardToppingsEnabled;
+      if (topping.category === "cream") return options.creamToppingsEnabled;
+      return true;
+    });
     if (selectedIdsList.length === 0) {
       return null;
     }
@@ -1163,7 +1170,19 @@ export function MenuManager({
                         title="Toppings — Standard"
                         enabled={optionForm.standardToppingsEnabled}
                         onToggle={(enabled) =>
-                          setOptionForm((current) => ({ ...current, standardToppingsEnabled: enabled }))
+                          setOptionForm((current) => {
+                            const selectedToppingIds = new Set(current.selectedToppingIds);
+                            if (!enabled) {
+                              for (const topping of standardToppings) {
+                                selectedToppingIds.delete(topping.id);
+                              }
+                            }
+                            return {
+                              ...current,
+                              standardToppingsEnabled: enabled,
+                              selectedToppingIds,
+                            };
+                          })
                         }
                       >
                         <div className="flex flex-wrap gap-1.5">
@@ -1194,7 +1213,19 @@ export function MenuManager({
                         title="Cream Top"
                         enabled={optionForm.creamToppingsEnabled}
                         onToggle={(enabled) =>
-                          setOptionForm((current) => ({ ...current, creamToppingsEnabled: enabled }))
+                          setOptionForm((current) => {
+                            const selectedToppingIds = new Set(current.selectedToppingIds);
+                            if (!enabled) {
+                              for (const topping of creamToppings) {
+                                selectedToppingIds.delete(topping.id);
+                              }
+                            }
+                            return {
+                              ...current,
+                              creamToppingsEnabled: enabled,
+                              selectedToppingIds,
+                            };
+                          })
                         }
                       >
                         <div className="flex flex-wrap gap-1.5">

@@ -123,30 +123,46 @@ function orderDTO(row: JsonRecord): OrderDTO {
 
 export const getDashboardContext = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+  // Prefer local JWT verification (getClaims) over a network getUser() round-trip.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  let userId = typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : null;
+  let userEmail =
+    typeof claimsData?.claims?.email === "string" ? claimsData.claims.email : null;
+  let userMetadata =
+    claimsData?.claims?.user_metadata &&
+    typeof claimsData.claims.user_metadata === "object"
+      ? (claimsData.claims.user_metadata as Record<string, unknown>)
+      : {};
+
+  if (!userId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
+    userId = user.id;
+    userEmail = user.email ?? null;
+    userMetadata = user.user_metadata ?? {};
+  }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, email, role")
-    .eq("id", user.id)
+    .eq("id", userId)
     .maybeSingle();
 
   if (!profile || profile.role !== "admin") redirect("/login");
 
   return {
     supabase,
-    user,
+    user: { id: userId, email: userEmail, user_metadata: userMetadata },
     identity: {
       name:
         profile.full_name?.trim() ||
-        (typeof user.user_metadata.full_name === "string" && user.user_metadata.full_name.trim()) ||
-        user.email?.split("@")[0] ||
+        (typeof userMetadata.full_name === "string" && userMetadata.full_name.trim()) ||
+        userEmail?.split("@")[0] ||
         "ToTea team",
-      email: profile.email || user.email || "Signed-in teammate",
+      email: profile.email || userEmail || "Signed-in teammate",
     },
   };
 });

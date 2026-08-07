@@ -422,11 +422,33 @@ export function OrdersManager({
                           </li>
                         ))}
                       </ul>
-                      <div className="flex items-center justify-between border-t border-(--line) bg-(--surface) px-4 py-3.5 sm:px-5">
-                        <span className="text-[13px] font-semibold text-foreground">Order total</span>
-                        <span className="font-mono text-[1.15rem] font-semibold tabular-nums text-foreground">
-                          {money(selected.total)}
-                        </span>
+                      <div className="space-y-2 border-t border-(--line) bg-(--surface) px-4 py-3.5 sm:px-5">
+                        <div className="flex items-center justify-between text-[13px]">
+                          <span className="text-(--muted)">Subtotal</span>
+                          <span className="font-mono tabular-nums text-foreground">
+                            {money(selected.subtotal || selected.total)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[13px]">
+                          <span className="text-(--muted)">Tax (10%)</span>
+                          <span className="font-mono tabular-nums text-foreground">
+                            {money(selected.tax)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[13px]">
+                          <span className="text-(--muted)">Tip</span>
+                          <span className="font-mono tabular-nums text-foreground">
+                            {money(selected.tip)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-(--line) pt-2.5">
+                          <span className="text-[13px] font-semibold text-foreground">
+                            Paid total
+                          </span>
+                          <span className="font-mono text-[1.15rem] font-semibold tabular-nums text-foreground">
+                            {money(selected.total)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </section>

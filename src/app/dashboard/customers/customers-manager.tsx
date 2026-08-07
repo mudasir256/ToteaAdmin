@@ -472,6 +472,26 @@ export function CustomersManager({
                                     </div>
                                   ))}
                                 </div>
+                                <div className="mt-2 space-y-1.5 rounded-lg border border-(--line) bg-(--surface) px-3 py-2.5 text-xs">
+                                  <div className="flex justify-between">
+                                    <span className="text-(--muted)">Subtotal</span>
+                                    <span className="font-mono tabular-nums">
+                                      {money(order.subtotal || order.total)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-(--muted)">Tax</span>
+                                    <span className="font-mono tabular-nums">{money(order.tax)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-(--muted)">Tip</span>
+                                    <span className="font-mono tabular-nums">{money(order.tip)}</span>
+                                  </div>
+                                  <div className="flex justify-between border-t border-(--line) pt-1.5 font-semibold">
+                                    <span>Paid total</span>
+                                    <span className="font-mono tabular-nums">{money(order.total)}</span>
+                                  </div>
+                                </div>
                               </div>
 
                               <div className="grid gap-2 sm:grid-cols-2">

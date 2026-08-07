@@ -66,6 +66,9 @@ export type OrderDTO = {
   contactNumber: string;
   items: OrderItemDTO[];
   shippingAddress: AddressDTO;
+  subtotal: number;
+  tax: number;
+  tip: number;
   total: number;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;

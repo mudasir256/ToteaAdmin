@@ -108,6 +108,9 @@ function orderDTO(row: JsonRecord): OrderDTO {
     contactNumber: text(customer.contact_number),
     items: orderItemsDTO(row.items),
     shippingAddress: addressDTO(row.shipping_address),
+    subtotal: number(row.subtotal) || number(row.total),
+    tax: number(row.tax),
+    tip: number(row.tip),
     total: number(row.total),
     orderStatus: orderStatus(row.order_status),
     paymentStatus: paymentStatus(row.payment_status),
@@ -173,7 +176,7 @@ export async function getOrdersPageData() {
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, order_number, user_id, customer_details, items, shipping_address, total, order_status, payment_status, inventory_status, inventory_error, payment_method, square_order_id, square_payment_id, created_at, updated_at",
+      "id, order_number, user_id, customer_details, items, shipping_address, subtotal, tax, tip, total, order_status, payment_status, inventory_status, inventory_error, payment_method, square_order_id, square_payment_id, created_at, updated_at",
     )
     .order("created_at", { ascending: false })
     .limit(150);
@@ -259,7 +262,7 @@ export async function getCustomerOrders(customerId: string) {
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, order_number, user_id, customer_details, items, shipping_address, total, order_status, payment_status, inventory_status, inventory_error, created_at, updated_at",
+      "id, order_number, user_id, customer_details, items, shipping_address, subtotal, tax, tip, total, order_status, payment_status, inventory_status, inventory_error, created_at, updated_at",
     )
     .eq("user_id", customerId)
     .order("created_at", { ascending: false })
@@ -276,7 +279,7 @@ export async function getDashboardOverview() {
     supabase
       .from("orders")
       .select(
-        "id, order_number, customer_details, items, total, order_status, payment_status, inventory_status, inventory_error, created_at",
+        "id, order_number, customer_details, items, subtotal, tax, tip, total, order_status, payment_status, inventory_status, inventory_error, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(6),

@@ -65,13 +65,59 @@ const emptyItemForm = {
   categoryId: "",
   name: "",
   openingQuantity: "0",
-  unit: "unit",
+  unit: "piece",
   minimumQuantity: "0",
   costPerUnit: "0",
   supplier: "",
   expirationDate: "",
   notes: "",
 };
+
+const inventoryUnitGroups: Array<{
+  label: string;
+  options: Array<{ value: string; label: string }>;
+}> = [
+  {
+    label: "Weight",
+    options: [
+      { value: "g", label: "gram (g)" },
+      { value: "kg", label: "kilogram (kg)" },
+      { value: "oz", label: "ounce (oz)" },
+      { value: "lb", label: "pound (lb)" },
+    ],
+  },
+  {
+    label: "Volume",
+    options: [
+      { value: "ml", label: "milliliter (ml)" },
+      { value: "L", label: "liter (L)" },
+      { value: "fl oz", label: "fluid ounce (fl oz)" },
+      { value: "quart", label: "quart" },
+      { value: "gallon", label: "gallon" },
+    ],
+  },
+  {
+    label: "Count / containers",
+    options: [
+      { value: "piece", label: "piece" },
+      { value: "each", label: "each" },
+      { value: "bag", label: "bag" },
+      { value: "bottle", label: "bottle" },
+      { value: "can", label: "can" },
+      { value: "box", label: "box" },
+      { value: "case", label: "case" },
+      { value: "pack", label: "pack" },
+      { value: "tub", label: "tub" },
+      { value: "carton", label: "carton (milk)" },
+      { value: "jug", label: "jug (syrup)" },
+      { value: "keg", label: "keg" },
+      { value: "sleeve", label: "sleeve (cups/lids)" },
+      { value: "roll", label: "roll (receipt paper, towels)" },
+    ],
+  },
+];
+
+const inventoryUnitOptions = inventoryUnitGroups.flatMap((group) => group.options);
 
 const stockActionCopy: Record<StockAction, { label: string; helper: string; button: string }> = {
   stock_in: {
@@ -150,17 +196,20 @@ function SelectMenu({
   label,
   value,
   options,
+  groups,
   onChange,
   ariaLabel,
 }: {
   label: string;
   value: string;
-  options: { value: string; label: string }[];
+  options?: { value: string; label: string }[];
+  groups?: Array<{ label: string; options: Array<{ value: string; label: string }> }>;
   onChange: (value: string) => void;
   ariaLabel: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const flatOptions = groups?.flatMap((group) => group.options) ?? options ?? [];
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
@@ -179,7 +228,9 @@ function SelectMenu({
     };
   }, []);
 
-  const selectedLabel = options.find((option) => option.value === value)?.label ?? label;
+  const selectedLabel =
+    flatOptions.find((option) => option.value === value)?.label ??
+    (value ? value : label);
 
   return (
     <div ref={rootRef} className="relative">
@@ -193,7 +244,9 @@ function SelectMenu({
         aria-expanded={isOpen}
         aria-label={ariaLabel}
       >
-        <span className="truncate text-foreground">{selectedLabel}</span>
+        <span className={`truncate ${value ? "text-foreground" : "text-(--muted)"}`}>
+          {selectedLabel}
+        </span>
         <IconChevronDown
           size={17}
           stroke={1.9}
@@ -205,28 +258,58 @@ function SelectMenu({
         <div
           role="listbox"
           aria-label={ariaLabel}
-          className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-(--line) bg-white p-1.5 shadow-[0_18px_50px_rgba(25,57,67,0.16)]"
+          className="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-(--line) bg-white p-1.5 shadow-[0_18px_50px_rgba(25,57,67,0.16)]"
         >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={value === option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${
-                value === option.value
-                  ? "bg-(--surface-tint) font-semibold text-foreground"
-                  : "text-(--muted) hover:bg-(--surface-tint) hover:text-foreground"
-              }`}
-            >
-              <span>{option.label}</span>
-              {value === option.value ? <IconCheck size={16} stroke={2} aria-hidden={true} /> : null}
-            </button>
-          ))}
+          {groups
+            ? groups.map((group) => (
+                <div key={group.label} className="pb-1.5">
+                  <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-(--muted)">
+                    {group.label}
+                  </p>
+                  {group.options.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={value === option.value}
+                      onClick={() => {
+                        onChange(option.value);
+                        setIsOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${
+                        value === option.value
+                          ? "bg-(--surface-tint) font-semibold text-foreground"
+                          : "text-(--muted) hover:bg-(--surface-tint) hover:text-foreground"
+                      }`}
+                    >
+                      <span>{option.label}</span>
+                      {value === option.value ? (
+                        <IconCheck size={16} stroke={2} aria-hidden={true} />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ))
+            : flatOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={value === option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${
+                    value === option.value
+                      ? "bg-(--surface-tint) font-semibold text-foreground"
+                      : "text-(--muted) hover:bg-(--surface-tint) hover:text-foreground"
+                  }`}
+                >
+                  <span>{option.label}</span>
+                  {value === option.value ? <IconCheck size={16} stroke={2} aria-hidden={true} /> : null}
+                </button>
+              ))}
         </div>
       ) : null}
     </div>
@@ -1119,26 +1202,24 @@ export function InventoryManager({
               </label>
               <label className="grid gap-2">
                 <span className="text-sm font-medium text-foreground">Unit</span>
-                <input
+                <SelectMenu
+                  label="Choose unit"
                   value={itemForm.unit}
-                  onChange={(event) => setItemForm((current) => ({ ...current, unit: event.target.value }))}
-                  className={inputClass}
-                  placeholder="bag, bottle, gallon"
-                  list="inventory-unit-suggestions"
-                  maxLength={40}
-                  required
+                  groups={
+                    itemForm.unit &&
+                    !inventoryUnitOptions.some((option) => option.value === itemForm.unit)
+                      ? [
+                          {
+                            label: "Current",
+                            options: [{ value: itemForm.unit, label: itemForm.unit }],
+                          },
+                          ...inventoryUnitGroups,
+                        ]
+                      : inventoryUnitGroups
+                  }
+                  onChange={(value) => setItemForm((current) => ({ ...current, unit: value }))}
+                  ariaLabel="Choose inventory unit"
                 />
-                <datalist id="inventory-unit-suggestions">
-                  <option value="bag" />
-                  <option value="bottle" />
-                  <option value="box" />
-                  <option value="case" />
-                  <option value="gallon" />
-                  <option value="pack" />
-                  <option value="piece" />
-                  <option value="pound" />
-                  <option value="tub" />
-                </datalist>
               </label>
               {!editingItem ? (
                 <label className="grid gap-2">

@@ -96,6 +96,7 @@ type OptionFormState = {
   defaultSugarLevelId: string | null;
   defaultIceLevelId: string | null;
   includedCreamToppingId: string | null;
+  includedStandardToppingId: string | null;
   selectedToppingIds: Set<string>;
 };
 
@@ -237,6 +238,7 @@ function defaultOptionState(
     defaultSugarLevelId: defaultLevelId(levels, "sugar"),
     defaultIceLevelId: defaultLevelId(levels, "ice"),
     includedCreamToppingId: null,
+    includedStandardToppingId: null,
     selectedToppingIds: defaultSelectedToppingIds(toppings),
   };
 }
@@ -400,6 +402,7 @@ export function MenuManager({
         settings?.default_sugar_level_id ?? defaultLevelId(optionLevels, "sugar"),
       defaultIceLevelId: settings?.default_ice_level_id ?? defaultLevelId(optionLevels, "ice"),
       includedCreamToppingId: settings?.included_cream_topping_id ?? null,
+      includedStandardToppingId: settings?.included_standard_topping_id ?? null,
       selectedToppingIds:
         toppingIds.length > 0
           ? new Set(toppingIds)
@@ -424,6 +427,7 @@ export function MenuManager({
           ? options.defaultIceLevelId
           : null,
         included_cream_topping_id: options.includedCreamToppingId,
+        included_standard_topping_id: options.includedStandardToppingId,
       },
       { onConflict: "menu_item_id" },
     );
@@ -622,6 +626,10 @@ export function MenuManager({
             current.includedCreamToppingId === toppingId
               ? null
               : current.includedCreamToppingId,
+          includedStandardToppingId:
+            current.includedStandardToppingId === toppingId
+              ? null
+              : current.includedStandardToppingId,
         };
       }
       next.add(toppingId);
@@ -1195,29 +1203,59 @@ export function MenuManager({
                               ...current,
                               standardToppingsEnabled: enabled,
                               selectedToppingIds,
+                              includedStandardToppingId: enabled
+                                ? current.includedStandardToppingId
+                                : null,
                             };
                           })
                         }
                       >
+                        <p className="mb-2 text-[11px] text-(--muted)">
+                          Use{" "}
+                          <span className="font-semibold text-(--green)">Set included</span> for a
+                          free recipe topping customers see with an INCLUDED badge.
+                        </p>
                         <div className="flex flex-wrap gap-1.5">
                           {standardToppings.map((topping) => {
                             const isSelected = optionForm.selectedToppingIds.has(topping.id);
+                            const isIncluded =
+                              optionForm.includedStandardToppingId === topping.id;
                             const isFree = topping.price === 0;
                             return (
-                              <button
-                                key={topping.id}
-                                type="button"
-                                onClick={() => toggleTopping(topping.id)}
-                                className={
-                                  isSelected
-                                    ? isFree
+                              <div key={topping.id} className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTopping(topping.id)}
+                                  className={
+                                    isIncluded
                                       ? `${chipBase} border-(--green) bg-(--green) text-white`
-                                      : `${chipBase} border-(--accent) bg-(--accent) text-white`
-                                    : `${chipBase} border-(--line) bg-(--surface) text-foreground`
-                                }
-                              >
-                                {toppingLabel(topping)}
-                              </button>
+                                      : isSelected
+                                        ? isFree
+                                          ? `${chipBase} border-(--green) bg-(--green-soft) text-(--green)`
+                                          : `${chipBase} border-(--accent) bg-(--accent) text-white`
+                                        : `${chipBase} border-(--line) bg-(--surface) text-foreground`
+                                  }
+                                >
+                                  {toppingLabel(topping)}
+                                  {isIncluded ? " · INCLUDED" : ""}
+                                </button>
+                                {isSelected ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setOptionForm((current) => ({
+                                        ...current,
+                                        includedStandardToppingId: isIncluded
+                                          ? null
+                                          : topping.id,
+                                      }))
+                                    }
+                                    className="rounded-full border border-(--line) px-2 py-1 text-[10px] font-semibold text-(--muted) transition hover:border-(--green) hover:text-(--green)"
+                                  >
+                                    {isIncluded ? "Clear" : "Set included"}
+                                  </button>
+                                ) : null}
+                              </div>
                             );
                           })}
                         </div>

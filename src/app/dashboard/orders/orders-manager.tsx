@@ -136,6 +136,9 @@ export function OrdersManager({
   }, [filter, orders, query]);
 
   const visibleOrders = filteredOrders.slice(0, visibleCount);
+  const selectedDrinkCount = selected
+    ? selected.items.reduce((sum, item) => sum + item.quantity, 0)
+    : 0;
 
   function changeStatus(order: OrderDTO, nextStatus: OrderStatus) {
     if (order.orderStatus === nextStatus) return;
@@ -298,111 +301,277 @@ export function OrdersManager({
       </section>
 
       {selected ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-[#193943]/25 px-4 py-6 backdrop-blur-[2px]" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setSelected(null);
-        }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="order-detail-title" className="mx-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-(--line) bg-white shadow-[0_28px_80px_rgba(25,57,67,0.22)]">
-            <header className="flex items-start justify-between gap-5 border-b border-(--line) px-5 py-5 sm:px-6">
-              <div>
-                <p className="font-mono text-xs font-semibold text-(--accent)">{selected.orderNumber}</p>
-                <h2 id="order-detail-title" className="mt-1 text-xl font-semibold tracking-tight text-foreground">Order details</h2>
-                <p className="mt-1 text-sm text-(--muted)">{dateTime(selected.createdAt)}</p>
-              </div>
-              <button type="button" onClick={() => setSelected(null)} className="grid size-10 place-items-center rounded-xl text-(--muted) transition hover:bg-(--surface-tint) hover:text-foreground focus-visible:ring-2 focus-visible:ring-(--accent)" aria-label="Close order details">
-                <IconX size={19} stroke={1.8} aria-hidden />
-              </button>
-            </header>
-
-            <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(240px,0.85fr)]">
-              <div className="space-y-5">
-                <section>
-                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-(--muted)">Items</p>
-                  <div className="mt-2 divide-y divide-(--line) rounded-xl border border-(--line)">
-                    {selected.items.map((item, index) => (
-                      <div key={`${item.menuItemId}-${item.size}-${index}`} className="flex items-center gap-3 px-4 py-3">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-(--surface-tint) text-(--accent)">
-                          <IconPackage size={17} stroke={1.8} aria-hidden />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-foreground">{item.name}</span>
-                          <span className="mt-0.5 block text-xs text-(--muted)">
-                            {[
-                              item.size || null,
-                              item.sweetness ? `Sugar: ${item.sweetness}` : null,
-                              item.ice ? `Ice: ${item.ice}` : null,
-                              `${item.quantity} × ${money(item.unitPrice)}`,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </span>
-                          {item.toppings.length > 0 ? (
-                            <span className="mt-1 block text-xs leading-5 text-(--muted)">
-                              Toppings: {item.toppings.map((topping) => topping.name).join(", ")}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="font-mono text-xs font-semibold text-foreground">{money(item.lineTotal)}</span>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between px-4 py-3">
-                      <span className="text-sm font-semibold text-foreground">Total</span>
-                      <span className="font-mono text-base font-semibold text-foreground">{money(selected.total)}</span>
-                    </div>
-                  </div>
-                </section>
-
-                <section>
-                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-(--muted)">Update status</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {orderStatuses.map((status) => (
-                      <button key={status} type="button" disabled={isPending} onClick={() => changeStatus(selected, status)} className={`h-9 rounded-xl px-3 text-xs font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) disabled:opacity-50 ${selected.orderStatus === status ? statusClasses[status] : "border border-(--line) bg-white text-(--muted) hover:border-(--accent) hover:text-foreground"}`}>
-                        {selected.orderStatus === status ? <IconCheck size={14} stroke={2.2} className="mr-1 inline" aria-hidden /> : null}
-                        {statusLabels[status]}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              </div>
-
-              <div className="space-y-3">
-                <DetailCard icon={<IconUser size={18} stroke={1.8} aria-hidden />} title="Customer">
-                  <p className="font-semibold text-foreground">{selected.customerName}</p>
-                  <p className="mt-1 break-all text-sm text-(--muted)">{selected.customerEmail}</p>
-                  <p className="mt-1 text-sm text-(--muted)">{selected.contactNumber || "No phone saved"}</p>
-                </DetailCard>
-                <DetailCard icon={<IconMapPin size={18} stroke={1.8} aria-hidden />} title="Delivery">
-                  <p className="text-sm leading-6 text-foreground">
-                    {selected.shippingAddress.addressLine1}
-                    {selected.shippingAddress.addressLine2 ? `, ${selected.shippingAddress.addressLine2}` : ""}<br />
-                    {selected.shippingAddress.city}, {selected.shippingAddress.state} {selected.shippingAddress.postalCode}<br />
-                    {selected.shippingAddress.country}
-                  </p>
-                </DetailCard>
-                <DetailCard icon={<IconCreditCard size={18} stroke={1.8} aria-hidden />} title="Payment">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-foreground">Square card</span>
-                    <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${selected.paymentStatus === "paid" ? "bg-[#e8f5ef] text-[#247158]" : "bg-(--accent-soft) text-(--accent-strong)"}`}>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-[#1a1410]/45 px-0 py-0 backdrop-blur-[3px] sm:items-center sm:px-4 sm:py-8"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelected(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-detail-title"
+            className="flex max-h-[100dvh] w-full max-w-[52rem] flex-col overflow-hidden rounded-t-[24px] border border-(--line) bg-white shadow-[0_32px_90px_rgba(26,20,16,0.28)] sm:max-h-[min(92vh,860px)] sm:rounded-[24px]"
+          >
+            <header className="shrink-0 border-b border-(--line) bg-[linear-gradient(180deg,#fffdf9_0%,#ffffff_100%)] px-5 pb-4 pt-5 sm:px-7 sm:pb-5 sm:pt-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-[11px] font-semibold tracking-wide text-(--accent)">
+                      {selected.orderNumber}
+                    </p>
+                    <span
+                      className={`inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${statusClasses[selected.orderStatus]}`}
+                    >
+                      <span className="size-1.5 rounded-full bg-current opacity-70" aria-hidden />
+                      {statusLabels[selected.orderStatus]}
+                    </span>
+                    <span
+                      className={`inline-flex h-6 items-center rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${
+                        selected.paymentStatus === "paid"
+                          ? "bg-[#e8f5ef] text-[#247158]"
+                          : "bg-(--accent-soft) text-(--accent-strong)"
+                      }`}
+                    >
                       {selected.paymentStatus}
                     </span>
                   </div>
-                  {selected.squarePaymentId ? <p className="mt-2 break-all font-mono text-[10px] leading-4 text-(--muted)">{selected.squarePaymentId}</p> : null}
-                </DetailCard>
-                <DetailCard icon={<IconChefHat size={18} stroke={1.8} aria-hidden />} title="Inventory">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${inventoryClasses[selected.inventoryStatus]}`}>
-                      {inventoryLabels[selected.inventoryStatus]}
-                    </span>
-                    {canRetryInventory(selected) ? (
-                      <button type="button" disabled={isPending} onClick={() => retryInventory(selected)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-(--line) bg-white px-2.5 text-xs font-semibold text-foreground transition hover:border-(--accent) hover:text-(--accent-strong) focus-visible:ring-2 focus-visible:ring-(--accent) disabled:opacity-50">
-                        {selected.inventoryStatus === "failed" || selected.inventoryStatus === "insufficient_stock" ? <IconAlertTriangle size={14} stroke={1.9} aria-hidden /> : <IconRefresh size={14} stroke={1.9} aria-hidden />}
-                        Retry
-                      </button>
-                    ) : null}
+                  <h2
+                    id="order-detail-title"
+                    className="mt-2 font-serif text-[1.65rem] font-semibold leading-none tracking-tight text-foreground"
+                  >
+                    Order details
+                  </h2>
+                  <p className="mt-2 text-[13px] text-(--muted)">{dateTime(selected.createdAt)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="grid size-10 shrink-0 place-items-center rounded-full border border-(--line) bg-white text-(--muted) transition hover:border-(--accent)/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-(--accent)"
+                  aria-label="Close order details"
+                >
+                  <IconX size={18} stroke={1.8} aria-hidden />
+                </button>
+              </div>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="grid gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.9fr)]">
+                <div className="space-y-6 px-5 py-5 sm:px-7 sm:py-6">
+                  <section>
+                    <div className="mb-3 flex items-end justify-between gap-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-(--muted)">
+                        Items
+                      </p>
+                      <p className="text-[12px] text-(--muted)">
+                        {selectedDrinkCount} {selectedDrinkCount === 1 ? "drink" : "drinks"}
+                      </p>
+                    </div>
+                    <div className="overflow-hidden rounded-2xl border border-(--line) bg-white">
+                      <ul className="divide-y divide-(--line)">
+                        {selected.items.map((item, index) => (
+                          <li
+                            key={`${item.menuItemId}-${item.size}-${index}`}
+                            className="flex gap-3.5 px-4 py-3.5 sm:px-5"
+                          >
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt=""
+                                className="size-12 shrink-0 rounded-xl object-cover ring-1 ring-(--line)"
+                              />
+                            ) : (
+                              <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-(--surface-tint) text-(--accent) ring-1 ring-(--line)">
+                                <IconPackage size={18} stroke={1.7} aria-hidden />
+                              </span>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-[14px] font-semibold leading-snug text-foreground">
+                                  {item.name}
+                                </p>
+                                <p className="shrink-0 font-mono text-[13px] font-semibold tabular-nums text-foreground">
+                                  {money(item.lineTotal)}
+                                </p>
+                              </div>
+                              <p className="mt-1 text-[12px] text-(--muted)">
+                                {item.quantity} × {money(item.unitPrice)}
+                                {item.size ? ` · ${item.size}` : ""}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {item.sweetness ? (
+                                  <span className="rounded-full bg-(--surface-tint) px-2 py-0.5 text-[11px] font-medium text-foreground">
+                                    {item.sweetness}
+                                  </span>
+                                ) : null}
+                                {item.ice ? (
+                                  <span className="rounded-full bg-(--surface-tint) px-2 py-0.5 text-[11px] font-medium text-foreground">
+                                    {item.ice}
+                                  </span>
+                                ) : null}
+                                {item.toppings.map((topping) => (
+                                  <span
+                                    key={topping.id}
+                                    className="rounded-full border border-(--line) bg-white px-2 py-0.5 text-[11px] font-medium text-(--muted)"
+                                  >
+                                    {topping.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="flex items-center justify-between border-t border-(--line) bg-(--surface) px-4 py-3.5 sm:px-5">
+                        <span className="text-[13px] font-semibold text-foreground">Order total</span>
+                        <span className="font-mono text-[1.15rem] font-semibold tabular-nums text-foreground">
+                          {money(selected.total)}
+                        </span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section>
+                    <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-(--muted)">
+                      Update status
+                    </p>
+                    <div className="rounded-2xl border border-(--line) bg-(--surface) p-1.5">
+                      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+                        {orderStatuses.map((status) => {
+                          const active = selected.orderStatus === status;
+                          return (
+                            <button
+                              key={status}
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => changeStatus(selected, status)}
+                              className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-[12px] font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) disabled:opacity-50 ${
+                                active
+                                  ? `${statusClasses[status]} shadow-[0_1px_2px_rgba(25,57,67,0.08)]`
+                                  : "bg-transparent text-(--muted) hover:bg-white hover:text-foreground"
+                              }`}
+                            >
+                              {active ? <IconCheck size={14} stroke={2.2} aria-hidden /> : null}
+                              {statusLabels[status]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <aside className="border-t border-(--line) bg-(--surface) px-5 py-5 sm:px-6 sm:py-6 lg:border-l lg:border-t-0">
+                  <div className="space-y-4">
+                    <DetailCard
+                      icon={<IconUser size={17} stroke={1.75} aria-hidden />}
+                      title="Customer"
+                      accent="accent"
+                    >
+                      <p className="text-[14px] font-semibold text-foreground">
+                        {selected.customerName}
+                      </p>
+                      <a
+                        href={`mailto:${selected.customerEmail}`}
+                        className="mt-1.5 block break-all text-[13px] text-(--muted) transition hover:text-(--accent-strong)"
+                      >
+                        {selected.customerEmail}
+                      </a>
+                      {selected.contactNumber ? (
+                        <a
+                          href={`tel:${selected.contactNumber}`}
+                          className="mt-1 block text-[13px] text-(--muted) transition hover:text-(--accent-strong)"
+                        >
+                          {selected.contactNumber}
+                        </a>
+                      ) : (
+                        <p className="mt-1 text-[13px] text-(--muted)">No phone saved</p>
+                      )}
+                    </DetailCard>
+
+                    <DetailCard
+                      icon={<IconMapPin size={17} stroke={1.75} aria-hidden />}
+                      title="Address"
+                      accent="blue"
+                    >
+                      <p className="text-[13px] leading-6 text-foreground">
+                        {selected.shippingAddress.addressLine1}
+                        {selected.shippingAddress.addressLine2
+                          ? `, ${selected.shippingAddress.addressLine2}`
+                          : ""}
+                        <br />
+                        {selected.shippingAddress.city}, {selected.shippingAddress.state}{" "}
+                        {selected.shippingAddress.postalCode}
+                        <br />
+                        <span className="text-(--muted)">{selected.shippingAddress.country}</span>
+                      </p>
+                    </DetailCard>
+
+                    <DetailCard
+                      icon={<IconCreditCard size={17} stroke={1.75} aria-hidden />}
+                      title="Payment"
+                      accent="green"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[13px] font-medium text-foreground">Square card</span>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${
+                            selected.paymentStatus === "paid"
+                              ? "bg-[#e8f5ef] text-[#247158]"
+                              : "bg-(--accent-soft) text-(--accent-strong)"
+                          }`}
+                        >
+                          {selected.paymentStatus}
+                        </span>
+                      </div>
+                      {selected.squarePaymentId ? (
+                        <p
+                          className="mt-2 break-all font-mono text-[10px] leading-4 text-(--muted)"
+                          title={selected.squarePaymentId}
+                        >
+                          {selected.squarePaymentId}
+                        </p>
+                      ) : null}
+                    </DetailCard>
+
+                    <DetailCard
+                      icon={<IconChefHat size={17} stroke={1.75} aria-hidden />}
+                      title="Inventory"
+                      accent="olive"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${inventoryClasses[selected.inventoryStatus]}`}
+                        >
+                          {selected.inventoryStatus === "deducted" ? (
+                            <IconCheck size={13} stroke={2.2} aria-hidden />
+                          ) : null}
+                          {inventoryLabels[selected.inventoryStatus]}
+                        </span>
+                        {canRetryInventory(selected) ? (
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => retryInventory(selected)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-(--line) bg-white px-2.5 text-[11px] font-semibold text-foreground transition hover:border-(--accent) hover:text-(--accent-strong) focus-visible:ring-2 focus-visible:ring-(--accent) disabled:opacity-50"
+                          >
+                            {selected.inventoryStatus === "failed" ||
+                            selected.inventoryStatus === "insufficient_stock" ? (
+                              <IconAlertTriangle size={14} stroke={1.9} aria-hidden />
+                            ) : (
+                              <IconRefresh size={14} stroke={1.9} aria-hidden />
+                            )}
+                            Retry
+                          </button>
+                        ) : null}
+                      </div>
+                      <p className="mt-2.5 text-[12px] leading-5 text-(--muted)">
+                        {selected.inventoryError ??
+                          "Each paid order is deducted once from its saved recipe."}
+                      </p>
+                    </DetailCard>
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-(--muted)">
-                    {selected.inventoryError ?? "Each paid order is deducted once from its saved recipe."}
-                  </p>
-                </DetailCard>
+                </aside>
               </div>
             </div>
           </section>
@@ -412,14 +581,33 @@ export function OrdersManager({
   );
 }
 
-function DetailCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function DetailCard({
+  icon,
+  title,
+  children,
+  accent = "accent",
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+  accent?: "accent" | "blue" | "green" | "olive";
+}) {
+  const iconTone = {
+    accent: "bg-(--accent-soft) text-(--accent-strong)",
+    blue: "bg-[#edf4ff] text-[#315e92]",
+    green: "bg-[#e8f5ef] text-[#247158]",
+    olive: "bg-[#f0eff8] text-[#5d50a8]",
+  }[accent];
+
   return (
-    <section className="rounded-xl border border-(--line) bg-(--surface) p-4">
-      <div className="flex items-center gap-2 text-(--muted)">
-        {icon}
-        <p className="text-xs font-semibold uppercase tracking-[0.08em]">{title}</p>
+    <section className="rounded-2xl border border-(--line) bg-white p-4 shadow-[0_1px_0_rgba(25,57,67,0.03)]">
+      <div className="flex items-center gap-2.5">
+        <span className={`grid size-8 place-items-center rounded-xl ${iconTone}`}>{icon}</span>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-(--muted)">
+          {title}
+        </p>
       </div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-3 pl-[2.65rem]">{children}</div>
     </section>
   );
 }

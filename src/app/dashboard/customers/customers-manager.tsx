@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import {
   IconCalendar,
   IconCreditCard,
+  IconLoader2,
   IconMail,
   IconMapPin,
   IconPackage,
@@ -16,6 +17,8 @@ import {
 } from "@tabler/icons-react";
 
 import type { CustomerDTO, OrderDTO, OrderStatus, PaymentStatus } from "@/lib/dashboard/types";
+
+import { loadCustomerOrdersAction } from "./actions";
 
 const statusClasses: Record<OrderStatus, string> = {
   pending: "bg-(--accent-soft) text-(--accent-strong)",
@@ -108,6 +111,25 @@ export function CustomersManager({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<CustomerDTO | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [isLoadingOrders, startOrdersTransition] = useTransition();
+
+  function openCustomer(customer: CustomerDTO) {
+    setSelected({ ...customer, orders: [] });
+    setExpandedOrderId(null);
+    setOrdersError(null);
+    startOrdersTransition(async () => {
+      const result = await loadCustomerOrdersAction(customer.id);
+      if (!result.success) {
+        setOrdersError(result.error ?? "Unable to load order history.");
+        return;
+      }
+      setSelected((current) =>
+        current?.id === customer.id ? { ...current, orders: result.orders } : current,
+      );
+      setExpandedOrderId(result.orders[0]?.id ?? null);
+    });
+  }
 
   const visibleCustomers = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -185,10 +207,7 @@ export function CustomersManager({
             <button
               key={customer.id}
               type="button"
-              onClick={() => {
-                setSelected(customer);
-                setExpandedOrderId(customer.orders[0]?.id ?? null);
-              }}
+              onClick={() => openCustomer(customer)}
               className="group rounded-2xl border border-(--line) bg-white p-4 text-left outline-none transition hover:-translate-y-0.5 hover:border-[#b8cfcd] hover:shadow-[0_14px_34px_rgba(25,57,67,0.08)] focus-visible:ring-2 focus-visible:ring-(--accent) motion-reduce:hover:translate-y-0"
             >
               <span className="flex items-start gap-3">
@@ -351,9 +370,22 @@ export function CustomersManager({
 
               <section>
                 <p className="text-xs font-semibold uppercase tracking-[0.1em] text-(--muted)">
-                  Order history · {selected.orders.length}
+                  Order history · {isLoadingOrders ? selected.orderCount : selected.orders.length}
                 </p>
-                {selected.orders.length === 0 ? (
+                {ordersError ? (
+                  <p
+                    role="alert"
+                    className="mt-2 rounded-xl border border-[#c98b26]/35 bg-(--accent-soft) px-4 py-3 text-sm text-[#7a4d00]"
+                  >
+                    {ordersError}
+                  </p>
+                ) : null}
+                {isLoadingOrders ? (
+                  <div className="mt-2 flex items-center justify-center gap-2 rounded-xl border border-dashed border-(--line) px-4 py-10 text-sm text-(--muted)">
+                    <IconLoader2 size={16} className="animate-spin" aria-hidden />
+                    Loading order history…
+                  </div>
+                ) : selected.orders.length === 0 ? (
                   <div className="mt-2 rounded-xl border border-dashed border-(--line) px-4 py-10 text-center text-sm text-(--muted)">
                     No orders recorded yet.
                   </div>

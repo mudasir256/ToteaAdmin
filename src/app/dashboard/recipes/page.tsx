@@ -1,4 +1,3 @@
-import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { getDashboardContext } from "@/lib/dashboard/data";
 
 import {
@@ -9,7 +8,7 @@ import {
 } from "./recipes-manager";
 
 export default async function RecipesPage() {
-  const { supabase, identity } = await getDashboardContext();
+  const { supabase } = await getDashboardContext();
   const [menuResult, inventoryResult, recipeResult] = await Promise.all([
     supabase
       .from("menu_items")
@@ -27,39 +26,30 @@ export default async function RecipesPage() {
   ]);
 
   return (
-    <main className="min-h-dvh bg-(--surface) xl:grid xl:grid-cols-[230px_minmax(0,1fr)]">
-      <DashboardSidebar
-        email={identity.email}
-        name={identity.name}
-        activeItem="recipes"
-      />
-      <section className="min-w-0 px-4 py-6 sm:px-7">
-        <div className="mx-auto max-w-[1240px]">
-          <header className="flex flex-wrap items-center justify-between gap-2.5">
-            <div>
-              <h1 className="font-serif text-xl font-bold text-foreground">Recipes</h1>
-              <p className="mt-0.5 text-xs text-(--muted)">
-                Define exactly what each drink size consumes before it reaches the customer menu.
-              </p>
-            </div>
-            <p className="rounded-full border border-(--line) bg-white px-3.5 py-2 text-xs font-medium text-(--muted)">
-              One recipe per size
+    <section className="min-w-0 px-4 py-6 sm:px-7">
+      <div className="mx-auto max-w-[1240px]">
+        <header className="flex flex-wrap items-center justify-between gap-2.5">
+          <div>
+            <h1 className="font-serif text-xl font-bold text-foreground">Recipes</h1>
+            <p className="mt-0.5 text-xs text-(--muted)">
+              Define exactly what each drink size consumes before it reaches the customer menu.
             </p>
-          </header>
-          <RecipesManager
-            initialMenuItems={(menuResult.data ?? []) as RecipeMenuItem[]}
-            initialInventoryItems={
-              (inventoryResult.data ?? []) as RecipeInventoryItem[]
-            }
-            initialRecipes={(recipeResult.data ?? []) as RecipeLine[]}
-            initialError={
-              menuResult.error?.message ??
-              inventoryResult.error?.message ??
-              recipeResult.error?.message
-            }
-          />
-        </div>
-      </section>
-    </main>
+          </div>
+          <p className="rounded-full border border-(--line) bg-white px-3.5 py-2 text-xs font-medium text-(--muted)">
+            One recipe per size
+          </p>
+        </header>
+        <RecipesManager
+          initialMenuItems={(menuResult.data ?? []) as RecipeMenuItem[]}
+          initialInventoryItems={(inventoryResult.data ?? []) as RecipeInventoryItem[]}
+          initialRecipes={(recipeResult.data ?? []) as RecipeLine[]}
+          initialError={
+            menuResult.error?.message ??
+            inventoryResult.error?.message ??
+            recipeResult.error?.message
+          }
+        />
+      </div>
+    </section>
   );
 }

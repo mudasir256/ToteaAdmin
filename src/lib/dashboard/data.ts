@@ -153,12 +153,14 @@ export const getDashboardContext = cache(async () => {
 
 export async function getOrdersPageData() {
   const { supabase } = await getDashboardContext();
+  // Cap payload size; older history can be added later with server pagination.
   const { data, error } = await supabase
     .from("orders")
     .select(
       "id, order_number, user_id, customer_details, items, shipping_address, total, order_status, payment_status, inventory_status, inventory_error, payment_method, square_order_id, square_payment_id, created_at, updated_at",
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(150);
 
   return {
     orders: (data ?? []).map((row) => orderDTO(row as JsonRecord)),
@@ -176,17 +178,43 @@ export async function getCustomersPageData() {
       )
       .eq("role", "customer")
       .order("created_at", { ascending: false }),
+    // Aggregates only — full order history loads when a customer is opened.
     supabase
       .from("orders")
-      .select(
-        "id, order_number, user_id, customer_details, items, shipping_address, total, order_status, payment_status, inventory_status, inventory_error, payment_method, square_order_id, square_payment_id, created_at, updated_at",
-      )
+      .select("id, user_id, total, payment_status, created_at")
       .order("created_at", { ascending: false }),
   ]);
 
-  const orderRows = ((ordersResult.data ?? []) as JsonRecord[]).map((row) => orderDTO(row));
+  type OrderAgg = {
+    orderCount: number;
+    totalSpent: number;
+    lastOrderAt: string | null;
+  };
+  const aggregates = new Map<string, OrderAgg>();
+  for (const row of (ordersResult.data ?? []) as JsonRecord[]) {
+    const userId = text(row.user_id);
+    if (!userId) continue;
+    const existing = aggregates.get(userId) ?? {
+      orderCount: 0,
+      totalSpent: 0,
+      lastOrderAt: null,
+    };
+    existing.orderCount += 1;
+    if (paymentStatus(row.payment_status) === "paid") {
+      existing.totalSpent += number(row.total);
+    }
+    if (!existing.lastOrderAt) {
+      existing.lastOrderAt = text(row.created_at) || null;
+    }
+    aggregates.set(userId, existing);
+  }
+
   const customers: CustomerDTO[] = ((profilesResult.data ?? []) as JsonRecord[]).map((profile) => {
-    const customerOrders = orderRows.filter((order) => order.userId === profile.id);
+    const stats = aggregates.get(text(profile.id)) ?? {
+      orderCount: 0,
+      totalSpent: 0,
+      lastOrderAt: null,
+    };
     return {
       id: text(profile.id),
       fullName: text(profile.full_name) || "Customer",
@@ -197,12 +225,10 @@ export async function getCustomersPageData() {
       role: text(profile.role) || "customer",
       joinedAt: text(profile.created_at),
       updatedAt: text(profile.updated_at),
-      orderCount: customerOrders.length,
-      totalSpent: customerOrders
-        .filter((order) => order.paymentStatus === "paid")
-        .reduce((sum, order) => sum + order.total, 0),
-      lastOrderAt: customerOrders[0]?.createdAt ?? null,
-      orders: customerOrders,
+      orderCount: stats.orderCount,
+      totalSpent: stats.totalSpent,
+      lastOrderAt: stats.lastOrderAt,
+      orders: [],
     };
   });
 
@@ -212,33 +238,55 @@ export async function getCustomersPageData() {
   };
 }
 
+export async function getCustomerOrders(customerId: string) {
+  const { supabase } = await getDashboardContext();
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
+      "id, order_number, user_id, customer_details, items, shipping_address, total, order_status, payment_status, inventory_status, inventory_error, created_at, updated_at",
+    )
+    .eq("user_id", customerId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as JsonRecord[]).map((row) => orderDTO(row));
+}
+
 export async function getDashboardOverview() {
   const { supabase } = await getDashboardContext();
-  const [ordersResult, customerCountResult, inventoryResult, menuResult] = await Promise.all([
+
+  const [recentOrdersResult, statsResult, inventoryResult, menuResult] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, order_number, customer_details, items, total, order_status, payment_status, inventory_status, inventory_error, created_at")
-      .order("created_at", { ascending: false }),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "customer"),
+      .select(
+        "id, order_number, customer_details, items, total, order_status, payment_status, inventory_status, inventory_error, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabase.rpc("admin_dashboard_stats"),
     supabase
       .from("inventory_items")
-      .select("name, current_quantity, minimum_quantity, unit, is_active")
+      .select("name, current_quantity, minimum_quantity, unit")
       .eq("is_active", true),
     supabase
       .from("menu_items")
-      .select("name, is_available")
+      .select("name")
       .eq("is_available", false)
       .order("sort_order", { ascending: true }),
   ]);
 
-  const orders = ((ordersResult.data ?? []) as JsonRecord[]).map((row) => orderDTO(row));
-  const inventory = (inventoryResult.data ?? []) as Array<{
-    name: string;
-    current_quantity: number | string;
-    minimum_quantity: number | string;
-    unit: string;
-  }>;
-  const lowStockItems = inventory
+  const recentOrders = ((recentOrdersResult.data ?? []) as JsonRecord[]).map((row) =>
+    orderDTO(row),
+  );
+  const lowStockItems = (
+    (inventoryResult.data ?? []) as Array<{
+      name: string;
+      current_quantity: number | string;
+      minimum_quantity: number | string;
+      unit: string;
+    }>
+  )
     .filter((item) => {
       const current = number(item.current_quantity);
       const minimum = number(item.minimum_quantity);
@@ -250,32 +298,26 @@ export async function getDashboardOverview() {
       unit: item.unit,
     }));
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const ordersToday = orders.filter(
-    (order) => order.createdAt && new Date(order.createdAt) >= startOfToday,
-  );
+  const stats = record(statsResult.data);
+  const statsError =
+    statsResult.error && !statsResult.error.message.includes("Could not find the function")
+      ? statsResult.error.message
+      : undefined;
 
   return {
-    orders,
-    recentOrders: orders.slice(0, 6),
-    ordersTodayCount: ordersToday.length,
-    revenueToday: ordersToday
-      .filter((order) => order.paymentStatus === "paid")
-      .reduce((sum, order) => sum + order.total, 0),
-    customerCount: customerCountResult.count ?? 0,
-    openOrderCount: orders.filter((order) =>
-      ["pending", "confirmed", "processing", "ready"].includes(order.orderStatus),
-    ).length,
-    paidTotal: orders
-      .filter((order) => order.paymentStatus === "paid")
-      .reduce((sum, order) => sum + order.total, 0),
+    orders: recentOrders,
+    recentOrders,
+    ordersTodayCount: number(stats.orders_today_count),
+    revenueToday: number(stats.revenue_today),
+    customerCount: number(stats.customer_count),
+    openOrderCount: number(stats.open_order_count),
+    paidTotal: number(stats.paid_total),
     soldOutItems: ((menuResult.data ?? []) as Array<{ name: string }>).map((item) => item.name),
     lowStockItems,
     stockAttention: lowStockItems.length,
     error:
-      ordersResult.error?.message ??
-      customerCountResult.error?.message ??
+      recentOrdersResult.error?.message ??
+      statsError ??
       inventoryResult.error?.message ??
       menuResult.error?.message,
   };

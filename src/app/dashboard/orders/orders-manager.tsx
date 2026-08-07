@@ -105,6 +105,8 @@ function matchesFilter(order: OrderDTO, filter: OrderFilter) {
   return order.orderStatus === "cancelled" || order.orderStatus === "refunded";
 }
 
+const PAGE_SIZE = 40;
+
 export function OrdersManager({
   initialOrders,
   initialError,
@@ -115,11 +117,12 @@ export function OrdersManager({
   const [orders, setOrders] = useState(initialOrders);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<OrderFilter>("all");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<OrderDTO | null>(null);
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [isPending, startTransition] = useTransition();
 
-  const visibleOrders = useMemo(() => {
+  const filteredOrders = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return orders.filter((order) => {
       const matchesQuery =
@@ -131,6 +134,8 @@ export function OrdersManager({
       return matchesQuery && matchesFilter(order, filter);
     });
   }, [filter, orders, query]);
+
+  const visibleOrders = filteredOrders.slice(0, visibleCount);
 
   function changeStatus(order: OrderDTO, nextStatus: OrderStatus) {
     if (order.orderStatus === nextStatus) return;
@@ -185,7 +190,10 @@ export function OrdersManager({
           <IconSearch size={18} stroke={1.8} className="shrink-0 text-(--muted)" aria-hidden />
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setVisibleCount(PAGE_SIZE);
+            }}
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-[#829399]"
             placeholder="Search order, customer, or item"
           />
@@ -195,7 +203,10 @@ export function OrdersManager({
             <button
               key={option.value}
               type="button"
-              onClick={() => setFilter(option.value)}
+              onClick={() => {
+                setFilter(option.value);
+                setVisibleCount(PAGE_SIZE);
+              }}
               className={`h-9 rounded-lg px-3 text-xs font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-(--accent) ${
                 filter === option.value
                   ? "bg-white text-foreground shadow-[0_1px_4px_rgba(25,57,67,0.1)]"
@@ -273,6 +284,17 @@ export function OrdersManager({
             ))}
           </div>
         )}
+        {filteredOrders.length > visibleCount ? (
+          <div className="border-t border-(--line) px-5 py-3">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              className="w-full rounded-xl border border-(--line) bg-(--surface) px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-white focus-visible:ring-2 focus-visible:ring-(--accent)"
+            >
+              Show more orders ({filteredOrders.length - visibleCount} remaining)
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {selected ? (

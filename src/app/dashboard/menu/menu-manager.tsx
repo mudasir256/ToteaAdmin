@@ -49,6 +49,7 @@ export type MenuItem = {
   calories: string;
   allergens: string;
   is_available: boolean;
+  is_bestseller: boolean;
   sort_order: number;
   recipe_required: boolean;
   menu_categories: { name: string } | { name: string }[] | null;
@@ -85,6 +86,7 @@ type ItemForm = {
   calories: string;
   allergens: string;
   availability: Availability;
+  isBestseller: boolean;
   sortOrder: string;
 };
 
@@ -170,6 +172,7 @@ function blankItem(categoryId = ""): ItemForm {
     calories: "",
     allergens: "See product details",
     availability: "draft",
+    isBestseller: false,
     sortOrder: "0",
   };
 }
@@ -349,7 +352,7 @@ export function MenuManager({
       supabase
         .from("menu_items")
         .select(
-          "id, category_id, name, description, image_url, price, sizes, ingredients, calories, allergens, is_available, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)",
+          "id, category_id, name, description, image_url, price, sizes, ingredients, calories, allergens, is_available, is_bestseller, sort_order, recipe_required, menu_categories(name), menu_item_variants(id, size, price, sort_order)",
         )
         .order("sort_order", { ascending: true }),
     ]);
@@ -546,6 +549,7 @@ export function MenuManager({
       calories: item.calories,
       allergens: item.allergens,
       availability: availabilityFromItem(item),
+      isBestseller: Boolean(item.is_bestseller),
       sortOrder: String(item.sort_order),
     });
     setOptionForm(defaultOptionState(initialToppings, optionLevels));
@@ -700,6 +704,7 @@ export function MenuManager({
       calories: itemForm.calories.trim(),
       allergens: itemForm.allergens.trim(),
       is_available: itemForm.availability === "available",
+      is_bestseller: itemForm.isBestseller,
       sort_order: Number(itemForm.sortOrder),
     };
     const { data: savedMenuItemId, error: saveError } = await supabase.rpc(
@@ -899,7 +904,16 @@ export function MenuManager({
                           height={76}
                           className="size-[38px] shrink-0 rounded-lg border border-(--line) bg-(--surface-tint) object-cover"
                         />
-                        <span className="text-[13px] font-medium text-foreground">{item.name}</span>
+                        <span className="min-w-0">
+                          <span className="block text-[13px] font-medium text-foreground">
+                            {item.name}
+                          </span>
+                          {item.is_bestseller ? (
+                            <span className="mt-1 inline-flex rounded-full bg-(--accent-soft) px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.04em] text-(--accent-strong)">
+                              Bestseller
+                            </span>
+                          ) : null}
+                        </span>
                       </div>
                     </td>
                     <td className="px-3.5 py-2.5">
@@ -1117,6 +1131,45 @@ export function MenuManager({
                         </button>
                       ))}
                     </div>
+                  </SlideField>
+
+                  <SlideField label="Storefront badge">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={itemForm.isBestseller}
+                      onClick={() =>
+                        setItemForm((form) => ({
+                          ...form,
+                          isBestseller: !form.isBestseller,
+                        }))
+                      }
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left transition ${
+                        itemForm.isBestseller
+                          ? "border-(--accent) bg-(--accent-soft)"
+                          : "border-(--line) bg-white hover:bg-(--surface)"
+                      }`}
+                    >
+                      <span>
+                        <span className="block text-[13px] font-semibold text-foreground">
+                          Bestseller
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-(--muted)">
+                          Show a “Bestseller” badge on the public menu card.
+                        </span>
+                      </span>
+                      <span
+                        className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                          itemForm.isBestseller ? "bg-(--accent)" : "bg-(--line)"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition ${
+                            itemForm.isBestseller ? "left-5" : "left-0.5"
+                          }`}
+                        />
+                      </span>
+                    </button>
                   </SlideField>
 
                   <div className="mt-5 border-t border-(--line) pt-[18px]">

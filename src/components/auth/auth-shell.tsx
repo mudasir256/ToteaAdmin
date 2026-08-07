@@ -32,13 +32,13 @@ export function AuthShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <figure className="relative row-span-2 min-h-0 overflow-hidden rounded-[20px] bg-white shadow-[0_14px_32px_rgba(34,74,74,0.10)]">
-            <Image src={drinks.mango} alt="Mango sago coconut milk from ToTea" fill priority unoptimized sizes="28vw" className="object-cover object-center" />
+            <Image src={drinks.mango} alt="Mango sago coconut milk from ToTea" fill priority sizes="28vw" className="object-cover object-center" />
           </figure>
           <figure className="relative min-h-0 overflow-hidden rounded-[20px] bg-white shadow-[0_14px_32px_rgba(34,74,74,0.10)]">
-            <Image src={drinks.matcha} alt="Matcha latte from ToTea" fill unoptimized sizes="18vw" className="object-cover object-center" />
+            <Image src={drinks.matcha} alt="Matcha latte from ToTea" fill sizes="18vw" className="object-cover object-center" />
           </figure>
           <figure className="relative min-h-0 overflow-hidden rounded-[20px] bg-white shadow-[0_14px_32px_rgba(34,74,74,0.10)]">
-            <Image src={drinks.coffee} alt="Vietnamese sea salt coffee from ToTea" fill unoptimized sizes="18vw" className="object-cover object-center" />
+            <Image src={drinks.coffee} alt="Vietnamese sea salt coffee from ToTea" fill sizes="18vw" className="object-cover object-center" />
           </figure>
         </div>
       </aside>

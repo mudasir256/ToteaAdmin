@@ -1,4 +1,3 @@
-import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { getDashboardContext } from "@/lib/dashboard/data";
 
 import {
@@ -8,7 +7,7 @@ import {
 } from "./inventory-manager";
 
 export default async function InventoryPage() {
-  const { supabase, identity } = await getDashboardContext();
+  const { supabase } = await getDashboardContext();
 
   const [categoriesResult, itemsResult] = await Promise.all([
     supabase
@@ -24,33 +23,23 @@ export default async function InventoryPage() {
   ]);
 
   return (
-    <main className="min-h-dvh bg-(--surface) xl:grid xl:h-dvh xl:grid-cols-[230px_minmax(0,1fr)] xl:overflow-hidden">
-      <DashboardSidebar
-        email={identity.email}
-        name={identity.name}
-        activeItem="inventory"
-      />
-      <section className="min-w-0 px-4 py-5 sm:px-7 xl:overflow-hidden">
-        <div className="mx-auto flex h-full min-h-0 max-w-[1240px] flex-col">
-          <header className="shrink-0">
-            <div>
-              <h1 className="font-serif text-xl font-bold text-foreground">Inventory</h1>
-              <p className="mt-0.5 text-xs text-(--muted)">
-                Receive supplies, record daily usage, and catch low stock before service begins.
-              </p>
-            </div>
-          </header>
+    <section className="min-w-0 px-4 py-5 sm:px-7 xl:h-dvh xl:overflow-hidden">
+      <div className="mx-auto flex h-full min-h-0 max-w-[1240px] flex-col">
+        <header className="shrink-0">
+          <div>
+            <h1 className="font-serif text-xl font-bold text-foreground">Inventory</h1>
+            <p className="mt-0.5 text-xs text-(--muted)">
+              Receive supplies, record daily usage, and catch low stock before service begins.
+            </p>
+          </div>
+        </header>
 
-          <InventoryManager
-            initialCategories={(categoriesResult.data ?? []) as InventoryCategory[]}
-            initialItems={(itemsResult.data ?? []) as InventoryItem[]}
-            initialError={
-              categoriesResult.error?.message ??
-              itemsResult.error?.message
-            }
-          />
-        </div>
-      </section>
-    </main>
+        <InventoryManager
+          initialCategories={(categoriesResult.data ?? []) as InventoryCategory[]}
+          initialItems={(itemsResult.data ?? []) as InventoryItem[]}
+          initialError={categoriesResult.error?.message ?? itemsResult.error?.message}
+        />
+      </div>
+    </section>
   );
 }

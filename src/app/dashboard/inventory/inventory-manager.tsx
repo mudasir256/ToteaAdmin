@@ -441,25 +441,54 @@ export function InventoryManager({
     setError(null);
 
     const supabase = createClient();
-    const result = editingCategory
-      ? await supabase
-          .from("inventory_categories")
-          .update({ name: categoryName.trim() })
-          .eq("id", editingCategory.id)
-      : await supabase.from("inventory_categories").insert({
-          name: categoryName.trim(),
-          sort_order: (categories.at(-1)?.sort_order ?? 0) + 10,
-        });
+    const trimmedName = categoryName.trim();
+    if (editingCategory) {
+      const { error: updateError } = await supabase
+        .from("inventory_categories")
+        .update({ name: trimmedName })
+        .eq("id", editingCategory.id);
 
-    if (result.error) {
-      setError(result.error.message);
-      setIsSaving(false);
-      return;
+      if (updateError) {
+        setError(updateError.message);
+        setIsSaving(false);
+        return;
+      }
+
+      setCategories((current) =>
+        current.map((category) =>
+          category.id === editingCategory.id ? { ...category, name: trimmedName } : category,
+        ),
+      );
+      setItems((current) =>
+        current.map((item) =>
+          item.category_id === editingCategory.id
+            ? {
+                ...item,
+                inventory_categories: { name: trimmedName },
+              }
+            : item,
+        ),
+      );
+      setNotice("Category renamed.");
+    } else {
+      const sortOrder = (categories.at(-1)?.sort_order ?? 0) + 10;
+      const { data, error: insertError } = await supabase
+        .from("inventory_categories")
+        .insert({ name: trimmedName, sort_order: sortOrder })
+        .select("id, name, sort_order")
+        .single();
+
+      if (insertError || !data) {
+        setError(insertError?.message ?? "Could not create category.");
+        setIsSaving(false);
+        return;
+      }
+
+      setCategories((current) => [...current, data as InventoryCategory]);
+      setNotice("Category created.");
     }
 
-    setNotice(editingCategory ? "Category renamed." : "Category created.");
     resetCategoryForm();
-    await loadInventory();
     setIsSaving(false);
   }
 
@@ -485,8 +514,8 @@ export function InventoryManager({
     }
 
     if (editingCategory?.id === category.id) resetCategoryForm();
+    setCategories((current) => current.filter((entry) => entry.id !== category.id));
     setNotice("Category deleted.");
-    await loadInventory();
   }
 
   function openEditItem(item: InventoryItem) {
@@ -521,23 +550,58 @@ export function InventoryManager({
       expiration_date: itemForm.expirationDate || null,
       notes: itemForm.notes.trim() || null,
     };
+    const categoryName =
+      categories.find((category) => category.id === itemForm.categoryId)?.name ?? "Uncategorized";
     const supabase = createClient();
-    const result = editingItem
-      ? await supabase.from("inventory_items").update(sharedPayload).eq("id", editingItem.id)
-      : await supabase.from("inventory_items").insert({
-          ...sharedPayload,
-          current_quantity: numberValue(itemForm.openingQuantity),
-        });
 
-    if (result.error) {
-      setError(result.error.message);
-      setIsSaving(false);
-      return;
+    if (editingItem) {
+      const { error: updateError } = await supabase
+        .from("inventory_items")
+        .update(sharedPayload)
+        .eq("id", editingItem.id);
+
+      if (updateError) {
+        setError(updateError.message);
+        setIsSaving(false);
+        return;
+      }
+
+      setItems((current) =>
+        current.map((item) =>
+          item.id === editingItem.id
+            ? {
+                ...item,
+                ...sharedPayload,
+                inventory_categories: { name: categoryName },
+              }
+            : item,
+        ),
+      );
+      setNotice("Item details updated.");
+    } else {
+      const openingQuantity = numberValue(itemForm.openingQuantity);
+      const { data, error: insertError } = await supabase
+        .from("inventory_items")
+        .insert({
+          ...sharedPayload,
+          current_quantity: openingQuantity,
+        })
+        .select(
+          "id, category_id, name, current_quantity, unit, minimum_quantity, cost_per_unit, supplier, expiration_date, notes, is_active, inventory_categories(name)",
+        )
+        .single();
+
+      if (insertError || !data) {
+        setError(insertError?.message ?? "Could not add inventory item.");
+        setIsSaving(false);
+        return;
+      }
+
+      setItems((current) => [...current, data as InventoryItem]);
+      setNotice("Inventory item added.");
     }
 
     setItemDialogOpen(false);
-    setNotice(editingItem ? "Item details updated." : "Inventory item added.");
-    await loadInventory();
     setIsSaving(false);
   }
 
@@ -569,9 +633,21 @@ export function InventoryManager({
       return;
     }
 
+    const quantity = numberValue(stockQuantity);
+    const nextQuantity =
+      stockAction === "adjustment"
+        ? quantity
+        : stockAction === "stock_in"
+          ? Number(stockItem.current_quantity) + quantity
+          : Math.max(0, Number(stockItem.current_quantity) - quantity);
+
+    setItems((current) =>
+      current.map((item) =>
+        item.id === stockItem.id ? { ...item, current_quantity: nextQuantity } : item,
+      ),
+    );
     setStockItem(null);
     setNotice(`${stockItem.name} stock updated.`);
-    await loadInventory();
     setIsSaving(false);
   }
 
@@ -580,9 +656,10 @@ export function InventoryManager({
 
     setError(null);
     const supabase = createClient();
+    const nextActive = !item.is_active;
     const { error: archiveError } = await supabase
       .from("inventory_items")
-      .update({ is_active: !item.is_active })
+      .update({ is_active: nextActive })
       .eq("id", item.id);
 
     if (archiveError) {
@@ -590,8 +667,12 @@ export function InventoryManager({
       return;
     }
 
+    setItems((current) =>
+      current.map((entry) =>
+        entry.id === item.id ? { ...entry, is_active: nextActive } : entry,
+      ),
+    );
     setNotice(item.is_active ? "Item archived." : "Item restored.");
-    await loadInventory();
   }
 
   async function deleteItem(item: InventoryItem) {
@@ -618,8 +699,8 @@ export function InventoryManager({
     }
     if (stockItem?.id === item.id) setStockItem(null);
 
+    setItems((current) => current.filter((entry) => entry.id !== item.id));
     setNotice("Inventory item deleted.");
-    await loadInventory();
   }
 
   const categoryOptions = [

@@ -85,17 +85,13 @@ export type CustomerDTO = {
   profileImageUrl: string | null;
   contactNumber: string;
   address: AddressDTO;
+  role: string;
   joinedAt: string;
+  updatedAt: string;
   orderCount: number;
   totalSpent: number;
   lastOrderAt: string | null;
-  recentOrders: Array<{
-    id: string;
-    orderNumber: string;
-    total: number;
-    orderStatus: OrderStatus;
-    paymentStatus: PaymentStatus;
-    createdAt: string;
-  }>;
+  /** Full website order history for this customer. */
+  orders: OrderDTO[];
 };
 

@@ -172,19 +172,21 @@ export async function getCustomersPageData() {
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, profile_image_url, contact_number, address_line_1, address_line_2, city, state, postal_code, country, created_at",
+        "id, full_name, email, profile_image_url, contact_number, address_line_1, address_line_2, city, state, postal_code, country, role, created_at, updated_at",
       )
       .eq("role", "customer")
       .order("created_at", { ascending: false }),
     supabase
       .from("orders")
-      .select("id, order_number, user_id, total, order_status, payment_status, created_at")
+      .select(
+        "id, order_number, user_id, customer_details, items, shipping_address, total, order_status, payment_status, inventory_status, inventory_error, payment_method, square_order_id, square_payment_id, created_at, updated_at",
+      )
       .order("created_at", { ascending: false }),
   ]);
 
-  const orderRows = (ordersResult.data ?? []) as JsonRecord[];
+  const orderRows = ((ordersResult.data ?? []) as JsonRecord[]).map((row) => orderDTO(row));
   const customers: CustomerDTO[] = ((profilesResult.data ?? []) as JsonRecord[]).map((profile) => {
-    const customerOrders = orderRows.filter((order) => order.user_id === profile.id);
+    const customerOrders = orderRows.filter((order) => order.userId === profile.id);
     return {
       id: text(profile.id),
       fullName: text(profile.full_name) || "Customer",
@@ -192,20 +194,15 @@ export async function getCustomersPageData() {
       profileImageUrl: text(profile.profile_image_url) || null,
       contactNumber: text(profile.contact_number),
       address: addressDTO(profile),
+      role: text(profile.role) || "customer",
       joinedAt: text(profile.created_at),
+      updatedAt: text(profile.updated_at),
       orderCount: customerOrders.length,
       totalSpent: customerOrders
-        .filter((order) => order.payment_status === "paid")
-        .reduce((sum, order) => sum + number(order.total), 0),
-      lastOrderAt: customerOrders[0] ? text(customerOrders[0].created_at) : null,
-      recentOrders: customerOrders.slice(0, 5).map((order) => ({
-        id: text(order.id),
-        orderNumber: text(order.order_number),
-        total: number(order.total),
-        orderStatus: orderStatus(order.order_status),
-        paymentStatus: paymentStatus(order.payment_status),
-        createdAt: text(order.created_at),
-      })),
+        .filter((order) => order.paymentStatus === "paid")
+        .reduce((sum, order) => sum + order.total, 0),
+      lastOrderAt: customerOrders[0]?.createdAt ?? null,
+      orders: customerOrders,
     };
   });
 

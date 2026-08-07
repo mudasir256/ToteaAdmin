@@ -16,9 +16,22 @@ import {
   IconX,
 } from "@tabler/icons-react";
 
-import type { CustomerDTO, OrderDTO, OrderStatus, PaymentStatus } from "@/lib/dashboard/types";
+import type {
+  CustomerDTO,
+  CustomerPromoDTO,
+  OrderDTO,
+  OrderStatus,
+  PaymentStatus,
+} from "@/lib/dashboard/types";
 
 import { loadCustomerOrdersAction } from "./actions";
+
+function discountLabel(promo: Pick<CustomerPromoDTO, "discountType" | "discountValue">) {
+  if (promo.discountType === "percent") {
+    return `${promo.discountValue}% off`;
+  }
+  return `$${Number(promo.discountValue).toFixed(2)} off`;
+}
 
 const statusClasses: Record<OrderStatus, string> = {
   pending: "bg-(--accent-soft) text-(--accent-strong)",
@@ -113,11 +126,77 @@ export function CustomersManager({
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [isLoadingOrders, startOrdersTransition] = useTransition();
+  const [promos, setPromos] = useState<CustomerPromoDTO[]>([]);
+  const [promosError, setPromosError] = useState<string | null>(null);
+  const [promosLoading, setPromosLoading] = useState(false);
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoType, setPromoType] = useState<"fixed" | "percent">("fixed");
+  const [promoValue, setPromoValue] = useState("2");
+  const [promoNote, setPromoNote] = useState("");
+
+  async function loadPromos(customerId: string) {
+    setPromosLoading(true);
+    setPromosError(null);
+    try {
+      const response = await fetch(`/api/customers/${customerId}/promos`);
+      const payload = (await response.json()) as { promos?: CustomerPromoDTO[]; error?: string };
+      if (!response.ok) {
+        setPromosError(payload.error ?? "Could not load promos.");
+        setPromos([]);
+        return;
+      }
+      setPromos(payload.promos ?? []);
+    } catch {
+      setPromosError("Could not load promos.");
+      setPromos([]);
+    } finally {
+      setPromosLoading(false);
+    }
+  }
+
+  async function givePromo() {
+    if (!selected) return;
+    setPromoBusy(true);
+    setPromosError(null);
+    try {
+      const response = await fetch(`/api/customers/${selected.id}/promos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: promoCode,
+          discountType: promoType,
+          discountValue: Number(promoValue),
+          note: promoNote,
+        }),
+      });
+      const payload = (await response.json()) as { promo?: CustomerPromoDTO; error?: string };
+      if (!response.ok || !payload.promo) {
+        setPromosError(payload.error ?? "Could not assign promo.");
+        return;
+      }
+      setPromos((current) => [payload.promo!, ...current]);
+      setPromoCode("");
+      setPromoNote("");
+      setPromoValue("2");
+      setPromoType("fixed");
+    } catch {
+      setPromosError("Could not assign promo.");
+    } finally {
+      setPromoBusy(false);
+    }
+  }
 
   function openCustomer(customer: CustomerDTO) {
     setSelected({ ...customer, orders: [] });
     setExpandedOrderId(null);
     setOrdersError(null);
+    setPromos([]);
+    setPromoCode("");
+    setPromoNote("");
+    setPromoValue("2");
+    setPromoType("fixed");
+    void loadPromos(customer.id);
     startOrdersTransition(async () => {
       const result = await loadCustomerOrdersAction(customer.id);
       if (!result.success) {
@@ -366,6 +445,101 @@ export function CustomersManager({
                     </p>
                   </div>
                 </div>
+
+                <div className="mt-4 rounded-xl border border-(--line) bg-white p-3.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-(--muted)">
+                    Give promo code
+                  </p>
+                  <p className="mt-1 text-[11px] text-(--muted)">
+                    Customer will see this on their cart and can apply it once.
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    <input
+                      value={promoCode}
+                      onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+                      placeholder="CODE"
+                      className="h-9 rounded-lg border border-(--line) bg-(--surface) px-3 font-mono text-sm uppercase outline-none focus:border-(--accent)"
+                    />
+                    <div className="grid grid-cols-[1fr_1fr] gap-2">
+                      <select
+                        value={promoType}
+                        onChange={(event) =>
+                          setPromoType(event.target.value === "percent" ? "percent" : "fixed")
+                        }
+                        className="h-9 rounded-lg border border-(--line) bg-(--surface) px-2 text-sm outline-none focus:border-(--accent)"
+                      >
+                        <option value="fixed">$ fixed</option>
+                        <option value="percent">% percent</option>
+                      </select>
+                      <input
+                        value={promoValue}
+                        onChange={(event) => setPromoValue(event.target.value)}
+                        inputMode="decimal"
+                        placeholder={promoType === "percent" ? "10" : "2"}
+                        className="h-9 rounded-lg border border-(--line) bg-(--surface) px-3 text-sm outline-none focus:border-(--accent)"
+                      />
+                    </div>
+                    <input
+                      value={promoNote}
+                      onChange={(event) => setPromoNote(event.target.value)}
+                      placeholder="Note (optional)"
+                      className="h-9 rounded-lg border border-(--line) bg-(--surface) px-3 text-sm outline-none focus:border-(--accent)"
+                    />
+                    <button
+                      type="button"
+                      disabled={promoBusy || !promoCode.trim()}
+                      onClick={() => void givePromo()}
+                      className="inline-flex h-9 items-center justify-center rounded-lg bg-(--accent) px-3 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                    >
+                      {promoBusy ? "Saving…" : "Give promo"}
+                    </button>
+                  </div>
+
+                  {promosError ? (
+                    <p className="mt-2 text-[12px] text-[#a33b2e]">{promosError}</p>
+                  ) : null}
+
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-(--muted)">
+                      Assigned promos
+                    </p>
+                    {promosLoading ? (
+                      <p className="text-[12px] text-(--muted)">Loading…</p>
+                    ) : promos.length === 0 ? (
+                      <p className="text-[12px] text-(--muted)">No promos assigned yet.</p>
+                    ) : (
+                      promos.map((promo) => (
+                        <div
+                          key={promo.id}
+                          className="rounded-lg border border-(--line) bg-(--surface) px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-sm font-semibold text-foreground">
+                              {promo.code}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${
+                                promo.status === "available"
+                                  ? "bg-[#e8f5ef] text-[#247158]"
+                                  : promo.status === "used"
+                                    ? "bg-[#edf4ff] text-[#315e92]"
+                                    : "bg-[#fff0ed] text-[#a33b2e]"
+                              }`}
+                            >
+                              {promo.status}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[12px] font-semibold text-(--accent-strong)">
+                            Discount: {discountLabel(promo)}
+                          </p>
+                          {promo.note ? (
+                            <p className="mt-0.5 text-[11px] text-(--muted)">{promo.note}</p>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
 
               <section>
@@ -479,6 +653,21 @@ export function CustomersManager({
                                       {money(order.subtotal || order.total)}
                                     </span>
                                   </div>
+                                  {order.discount > 0 ? (
+                                    <div className="flex justify-between">
+                                      <span className="text-(--muted)">
+                                        Discount
+                                        {order.discountCode
+                                          ? ` (${order.discountCode})`
+                                          : order.discountReason === "first_order"
+                                            ? " (First order)"
+                                            : ""}
+                                      </span>
+                                      <span className="font-mono tabular-nums">
+                                        −{money(order.discount)}
+                                      </span>
+                                    </div>
+                                  ) : null}
                                   <div className="flex justify-between">
                                     <span className="text-(--muted)">Tax</span>
                                     <span className="font-mono tabular-nums">{money(order.tax)}</span>

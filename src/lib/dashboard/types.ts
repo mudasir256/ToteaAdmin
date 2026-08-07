@@ -67,6 +67,9 @@ export type OrderDTO = {
   items: OrderItemDTO[];
   shippingAddress: AddressDTO;
   subtotal: number;
+  discount: number;
+  discountCode: string | null;
+  discountReason: string | null;
   tax: number;
   tip: number;
   total: number;
@@ -79,6 +82,18 @@ export type OrderDTO = {
   squarePaymentId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CustomerPromoDTO = {
+  id: string;
+  code: string;
+  discountType: "fixed" | "percent";
+  discountValue: number;
+  status: "available" | "used" | "revoked";
+  note: string | null;
+  assignedAt: string;
+  usedAt: string | null;
+  usedOrderId: string | null;
 };
 
 export type CustomerDTO = {

@@ -429,6 +429,21 @@ export function OrdersManager({
                             {money(selected.subtotal || selected.total)}
                           </span>
                         </div>
+                        {selected.discount > 0 ? (
+                          <div className="flex items-center justify-between text-[13px]">
+                            <span className="text-(--muted)">
+                              Discount
+                              {selected.discountCode
+                                ? ` (${selected.discountCode})`
+                                : selected.discountReason === "first_order"
+                                  ? " (First order)"
+                                  : ""}
+                            </span>
+                            <span className="font-mono tabular-nums text-foreground">
+                              −{money(selected.discount)}
+                            </span>
+                          </div>
+                        ) : null}
                         <div className="flex items-center justify-between text-[13px]">
                           <span className="text-(--muted)">Tax (10%)</span>
                           <span className="font-mono tabular-nums text-foreground">

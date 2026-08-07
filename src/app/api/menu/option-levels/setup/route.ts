@@ -7,8 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 
 const DEFAULT_LEVELS = [
-  { kind: "sugar" as const, name: "Less Sugar", sort_order: 0, is_default: true },
-  { kind: "sugar" as const, name: "Light Sugar", sort_order: 1, is_default: false },
+  { kind: "sugar" as const, name: "Light Sugar", sort_order: 1, is_default: true },
   { kind: "sugar" as const, name: "Minimal Sugar", sort_order: 2, is_default: false },
   { kind: "sugar" as const, name: "No Added", sort_order: 3, is_default: false },
   { kind: "sugar" as const, name: "Super Sweet", sort_order: 4, is_default: false },

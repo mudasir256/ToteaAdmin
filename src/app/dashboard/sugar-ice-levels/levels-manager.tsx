@@ -6,6 +6,7 @@ import {
   IconCopy,
   IconPencil,
   IconPlus,
+  IconStar,
   IconStarFilled,
   IconTrash,
   IconX,
@@ -328,7 +329,7 @@ export function LevelsManager({
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <LevelPanel
           title="Sugar Level"
-          subtitle={`${sugarLevels.length} value${sugarLevels.length === 1 ? "" : "s"} · click ✎ to rename anywhere it's used`}
+          subtitle={`${sugarLevels.length} value${sugarLevels.length === 1 ? "" : "s"} · star sets the storefront default`}
           kind="sugar"
           levels={sugarLevels}
           busyId={busyId}
@@ -339,7 +340,7 @@ export function LevelsManager({
         />
         <LevelPanel
           title="Ice Level"
-          subtitle={`${iceLevels.length} value${iceLevels.length === 1 ? "" : "s"}`}
+          subtitle={`${iceLevels.length} value${iceLevels.length === 1 ? "" : "s"} · star sets the storefront default`}
           kind="ice"
           levels={iceLevels}
           busyId={busyId}
@@ -349,12 +350,6 @@ export function LevelsManager({
           onDelete={deleteLevel}
         />
       </div>
-
-      <p className="mt-3.5 rounded-lg border border-dashed border-[#d9b57a] bg-[#fdf3e3] px-3 py-2.5 text-[10.5px] leading-5 text-(--accent-strong)">
-        Dev note: this tab is new — previously Sugar/Ice values had no management screen. &quot;★
-        default&quot; is the global fallback; individual menu items can override their own default in
-        Menu → Options &amp; Toppings without changing it here.
-      </p>
     </div>
   );
 }
@@ -454,20 +449,27 @@ function LevelPanel({
                   maxLength={80}
                 />
               ) : (
-                <button
-                  type="button"
-                  onDoubleClick={() => void onSetDefault(level)}
-                  className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold text-foreground"
-                  title={level.isDefault ? "Default value" : "Double-click to make default"}
-                >
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
                   {level.name}
-                </button>
+                </span>
               )}
 
               {level.isDefault ? (
-                <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-bold text-(--accent-strong)">
+                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-(--accent-soft) px-2 py-1 text-[11px] font-bold text-(--accent-strong)">
                   <IconStarFilled size={12} aria-hidden /> default
                 </span>
+              ) : editingId !== level.id ? (
+                <button
+                  type="button"
+                  onClick={() => void onSetDefault(level)}
+                  disabled={busyId === level.id}
+                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-(--muted) transition hover:bg-(--accent-soft) hover:text-(--accent-strong) disabled:opacity-50"
+                  title={`Make ${level.name} the storefront default`}
+                  aria-label={`Set ${level.name} as default`}
+                >
+                  <IconStar size={14} stroke={1.9} aria-hidden />
+                  Set default
+                </button>
               ) : null}
 
               {editingId === level.id ? (
@@ -507,8 +509,13 @@ function LevelPanel({
                   <button
                     type="button"
                     onClick={() => void onDelete(level)}
-                    disabled={busyId === level.id}
-                    className="grid size-8 place-items-center rounded-lg text-(--muted) transition hover:bg-(--red-soft) hover:text-(--red) disabled:opacity-50"
+                    disabled={busyId === level.id || level.isDefault}
+                    title={
+                      level.isDefault
+                        ? "Choose another default before deleting this value"
+                        : `Delete ${level.name}`
+                    }
+                    className="grid size-8 place-items-center rounded-lg text-(--muted) transition hover:bg-(--red-soft) hover:text-(--red) disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label={`Delete ${level.name}`}
                   >
                     <IconTrash size={16} stroke={1.8} aria-hidden />

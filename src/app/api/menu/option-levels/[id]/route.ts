@@ -66,6 +66,23 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
+  // Keep every drink's stored default in sync with Sugar & Ice Levels ★ default.
+  if (body.isDefault === true && data) {
+    const column =
+      data.kind === "sugar" ? "default_sugar_level_id" : "default_ice_level_id";
+    const { error: syncError } = await auth.supabase!
+      .from("menu_item_option_settings")
+      .update({ [column]: data.id })
+      .not("menu_item_id", "is", null);
+
+    if (syncError) {
+      return NextResponse.json(
+        { error: `Default saved, but drinks were not synced: ${syncError.message}` },
+        { status: 400 },
+      );
+    }
+  }
+
   return NextResponse.json({ level: data });
 }
 

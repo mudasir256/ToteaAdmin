@@ -132,8 +132,7 @@ const availabilityOptions: Array<{
 
 /** Screenshot defaults — used when menu_option_levels isn't seeded yet. */
 const FALLBACK_OPTION_LEVELS: MenuOptionLevel[] = [
-  { id: "fallback-sugar-0", kind: "sugar", name: "Less Sugar", sort_order: 0, is_default: true, is_active: true },
-  { id: "fallback-sugar-1", kind: "sugar", name: "Light Sugar", sort_order: 1, is_default: false, is_active: true },
+  { id: "fallback-sugar-1", kind: "sugar", name: "Light Sugar", sort_order: 1, is_default: true, is_active: true },
   { id: "fallback-sugar-2", kind: "sugar", name: "Minimal Sugar", sort_order: 2, is_default: false, is_active: true },
   { id: "fallback-sugar-3", kind: "sugar", name: "No Added", sort_order: 3, is_default: false, is_active: true },
   { id: "fallback-sugar-4", kind: "sugar", name: "Super Sweet", sort_order: 4, is_default: false, is_active: true },
@@ -152,10 +151,6 @@ function resolveOptionLevels(levels: MenuOptionLevel[]) {
     ...(hasSugar ? active.filter((level) => level.kind === "sugar") : FALLBACK_OPTION_LEVELS.filter((level) => level.kind === "sugar")),
     ...(hasIce ? active.filter((level) => level.kind === "ice") : FALLBACK_OPTION_LEVELS.filter((level) => level.kind === "ice")),
   ];
-}
-
-function isPersistedLevelId(id: string | null) {
-  return Boolean(id && !id.startsWith("fallback-"));
 }
 
 function blankItem(categoryId = ""): ItemForm {
@@ -423,12 +418,9 @@ export function MenuManager({
         ice_enabled: true,
         standard_toppings_enabled: options.standardToppingsEnabled,
         cream_toppings_enabled: options.creamToppingsEnabled,
-        default_sugar_level_id: isPersistedLevelId(options.defaultSugarLevelId)
-          ? options.defaultSugarLevelId
-          : null,
-        default_ice_level_id: isPersistedLevelId(options.defaultIceLevelId)
-          ? options.defaultIceLevelId
-          : null,
+        // Always store the global ★ defaults from Sugar & Ice Levels (not per-drink overrides).
+        default_sugar_level_id: defaultLevelId(optionLevels, "sugar"),
+        default_ice_level_id: defaultLevelId(optionLevels, "ice"),
         included_cream_topping_id: options.includedCreamToppingId,
         included_standard_topping_id: options.includedStandardToppingId,
       },
@@ -1184,20 +1176,16 @@ export function MenuManager({
 
                     <div className="grid gap-3">
                       <OptionCard title="Sugar Level" compulsory>
+                        <p className="mb-2 text-[11px] text-(--muted)">
+                          Storefront preselects the ★ default from{" "}
+                          <span className="font-semibold text-foreground">Sugar &amp; Ice Levels</span>.
+                        </p>
                         <div className="flex flex-wrap gap-1.5">
                           {sugarLevels.map((level) => {
-                            const isDefault = optionForm.defaultSugarLevelId === level.id;
+                            const isDefault = level.is_default;
                             return (
-                              <button
+                              <span
                                 key={level.id}
-                                type="button"
-                                onClick={() =>
-                                  setOptionForm((current) => ({
-                                    ...current,
-                                    sugarEnabled: true,
-                                    defaultSugarLevelId: level.id,
-                                  }))
-                                }
                                 className={
                                   isDefault
                                     ? `${chipBase} border-(--accent) bg-(--accent) text-white`
@@ -1206,27 +1194,23 @@ export function MenuManager({
                               >
                                 {level.name}
                                 {isDefault ? " ★" : ""}
-                              </button>
+                              </span>
                             );
                           })}
                         </div>
                       </OptionCard>
 
                       <OptionCard title="Ice Level" compulsory>
+                        <p className="mb-2 text-[11px] text-(--muted)">
+                          Storefront preselects the ★ default from{" "}
+                          <span className="font-semibold text-foreground">Sugar &amp; Ice Levels</span>.
+                        </p>
                         <div className="flex flex-wrap gap-1.5">
                           {iceLevels.map((level) => {
-                            const isDefault = optionForm.defaultIceLevelId === level.id;
+                            const isDefault = level.is_default;
                             return (
-                              <button
+                              <span
                                 key={level.id}
-                                type="button"
-                                onClick={() =>
-                                  setOptionForm((current) => ({
-                                    ...current,
-                                    iceEnabled: true,
-                                    defaultIceLevelId: level.id,
-                                  }))
-                                }
                                 className={
                                   isDefault
                                     ? `${chipBase} border-(--accent) bg-(--accent) text-white`
@@ -1235,7 +1219,7 @@ export function MenuManager({
                               >
                                 {level.name}
                                 {isDefault ? " ★" : ""}
-                              </button>
+                              </span>
                             );
                           })}
                         </div>
